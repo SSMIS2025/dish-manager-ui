@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit, Trash2, Satellite, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ProjectSelector from "@/components/ProjectSelector";
+import { useProject } from "@/contexts/ProjectContext";
+import { PaginationCustom } from "@/components/ui/pagination-custom";
 
 interface SatelliteData {
   id: string;
@@ -25,23 +27,16 @@ interface SatelliteData {
   unicableCount: number;
 }
 
-const SatelliteManagement = () => {
+interface SatelliteManagementProps {
+  username: string;
+}
+
+const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const { toast } = useToast();
-  const [satellites, setSatellites] = useState<SatelliteData[]>([
-    {
-      id: "1",
-      name: "ASTRA 2E/2F/2G",
-      position: "28.2°E",
-      age: "Active since 2010",
-      direction: "East",
-      services: ["BBC", "ITV", "Sky Sports", "Channel 4"],
-      carriers: ["Sky", "Freesat", "BBC"],
-      lnbCount: 3,
-      switchCount: 2,
-      motorCount: 1,
-      unicableCount: 1
-    }
-  ]);
+  const { currentProject, updateProject, logActivity } = useProject();
+  const [satellites, setSatellites] = useState<SatelliteData[]>(currentProject?.equipment.satellites || []);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSatellite, setEditingSatellite] = useState<SatelliteData | null>(null);
@@ -66,7 +61,19 @@ const SatelliteManagement = () => {
   };
 
   const handleDelete = (id: string) => {
-    setSatellites(satellites.filter(s => s.id !== id));
+    const satellite = satellites.find(s => s.id === id);
+    const updatedSatellites = satellites.filter(s => s.id !== id);
+    setSatellites(updatedSatellites);
+    
+    if (currentProject) {
+      const updatedProject = {
+        ...currentProject,
+        equipment: { ...currentProject.equipment, satellites: updatedSatellites }
+      };
+      updateProject(updatedProject);
+      logActivity(username, "Satellite Deleted", `Deleted satellite: ${satellite?.name}`, currentProject.id);
+    }
+    
     toast({
       title: "Satellite Deleted",
       description: "The satellite has been successfully removed.",
@@ -93,8 +100,20 @@ const SatelliteManagement = () => {
       unicableCount: formData.unicableCount || 0
     } as SatelliteData;
 
+    let updatedSatellites;
     if (editingSatellite) {
-      setSatellites(satellites.map(s => s.id === editingSatellite.id ? satelliteData : s));
+      updatedSatellites = satellites.map(s => s.id === editingSatellite.id ? satelliteData : s);
+      setSatellites(updatedSatellites);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, satellites: updatedSatellites }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Satellite Updated", `Updated satellite: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Satellite Updated",
         description: "The satellite has been successfully updated.",
@@ -104,7 +123,18 @@ const SatelliteManagement = () => {
         ...satelliteData,
         id: Date.now().toString(),
       };
-      setSatellites([...satellites, newSatellite]);
+      updatedSatellites = [...satellites, newSatellite];
+      setSatellites(updatedSatellites);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, satellites: updatedSatellites }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Satellite Added", `Added new satellite: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Satellite Added",
         description: "The new satellite has been successfully added.",
@@ -119,8 +149,14 @@ const SatelliteManagement = () => {
     return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
   };
 
+  const totalPages = Math.ceil(satellites.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedSatellites = satellites.slice(startIndex, startIndex + itemsPerPage);
+
   return (
     <div className="p-6 space-y-6">
+      <ProjectSelector username={username} isAdmin={true} />
+      
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -268,94 +304,110 @@ const SatelliteManagement = () => {
       </div>
 
       <div className="grid gap-6">
-        {satellites.map((satellite) => (
-          <Card key={satellite.id} className="shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-                    <Satellite className="w-6 h-6 text-primary-foreground" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">{satellite.name}</CardTitle>
-                    <CardDescription>
-                      Position: {satellite.position} • Direction: {satellite.direction}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(satellite)}
-                    className="text-primary hover:text-primary-hover"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(satellite.id)}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center">
-                      <Info className="w-4 h-4 mr-2 text-primary" />
-                      Information
-                    </h4>
-                    <p className="text-sm text-muted-foreground">{satellite.age}</p>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2">Services</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {satellite.services.map((service, index) => (
-                        <Badge key={index} variant="outline">{service}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2">Carriers</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {satellite.carriers.map((carrier, index) => (
-                        <Badge key={index} variant="secondary">{carrier}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <h4 className="font-semibold">Connected Equipment</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-muted rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{satellite.lnbCount}</div>
-                      <div className="text-sm text-muted-foreground">LNBs</div>
-                    </div>
-                    <div className="text-center p-3 bg-muted rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{satellite.switchCount}</div>
-                      <div className="text-sm text-muted-foreground">Switches</div>
-                    </div>
-                    <div className="text-center p-3 bg-muted rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{satellite.motorCount}</div>
-                      <div className="text-sm text-muted-foreground">Motors</div>
-                    </div>
-                    <div className="text-center p-3 bg-muted rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{satellite.unicableCount}</div>
-                      <div className="text-sm text-muted-foreground">Unicables</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        {paginatedSatellites.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <p className="text-muted-foreground">No satellites found in this project</p>
             </CardContent>
           </Card>
-        ))}
+        ) : (
+          paginatedSatellites.map((satellite) => (
+            <Card key={satellite.id} className="shadow-card">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
+                      <Satellite className="w-6 h-6 text-primary-foreground" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">{satellite.name}</CardTitle>
+                      <CardDescription>
+                        Position: {satellite.position} • Direction: {satellite.direction}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(satellite)}
+                      className="text-primary hover:text-primary-hover"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(satellite.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2 flex items-center">
+                        <Info className="w-4 h-4 mr-2 text-primary" />
+                        Information
+                      </h4>
+                      <p className="text-sm text-muted-foreground">{satellite.age}</p>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-2">Services</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {satellite.services.map((service, index) => (
+                          <Badge key={index} variant="outline">{service}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-2">Carriers</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {satellite.carriers.map((carrier, index) => (
+                          <Badge key={index} variant="secondary">{carrier}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">Connected Equipment</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{satellite.lnbCount}</div>
+                        <div className="text-sm text-muted-foreground">LNBs</div>
+                      </div>
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{satellite.switchCount}</div>
+                        <div className="text-sm text-muted-foreground">Switches</div>
+                      </div>
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{satellite.motorCount}</div>
+                        <div className="text-sm text-muted-foreground">Motors</div>
+                      </div>
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{satellite.unicableCount}</div>
+                        <div className="text-sm text-muted-foreground">Unicables</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
+      
+      {satellites.length > itemsPerPage && (
+        <PaginationCustom
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      )}
     </div>
   );
 };

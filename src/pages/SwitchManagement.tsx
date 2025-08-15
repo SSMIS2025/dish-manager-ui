@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ProjectSelector from "@/components/ProjectSelector";
+import { useProject } from "@/contexts/ProjectContext";
+import { PaginationCustom } from "@/components/ui/pagination-custom";
 
 interface SwitchDevice {
   id: string;
@@ -19,18 +22,16 @@ interface SwitchDevice {
   location: string;
 }
 
-const SwitchManagement = () => {
+interface SwitchManagementProps {
+  username: string;
+}
+
+const SwitchManagement = ({ username }: SwitchManagementProps) => {
   const { toast } = useToast();
-  const [devices, setDevices] = useState<SwitchDevice[]>([
-    {
-      id: "1",
-      name: "SW-001",
-      type: "DiSEqC 1.0",
-      ports: "4",
-      status: "Active",
-      location: "Main Dish"
-    }
-  ]);
+  const { currentProject, updateProject, logActivity } = useProject();
+  const [devices, setDevices] = useState<SwitchDevice[]>(currentProject?.equipment.switches || []);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<SwitchDevice | null>(null);
@@ -53,7 +54,19 @@ const SwitchManagement = () => {
   };
 
   const handleDelete = (id: string) => {
-    setDevices(devices.filter(d => d.id !== id));
+    const device = devices.find(d => d.id === id);
+    const updatedDevices = devices.filter(d => d.id !== id);
+    setDevices(updatedDevices);
+    
+    if (currentProject) {
+      const updatedProject = {
+        ...currentProject,
+        equipment: { ...currentProject.equipment, switches: updatedDevices }
+      };
+      updateProject(updatedProject);
+      logActivity(username, "Switch Deleted", `Deleted switch: ${device?.name}`, currentProject.id);
+    }
+    
     toast({
       title: "Switch Deleted",
       description: "The switch device has been successfully removed.",
@@ -70,8 +83,20 @@ const SwitchManagement = () => {
       return;
     }
 
+    let updatedDevices;
     if (editingDevice) {
-      setDevices(devices.map(d => d.id === editingDevice.id ? { ...formData as SwitchDevice } : d));
+      updatedDevices = devices.map(d => d.id === editingDevice.id ? { ...formData as SwitchDevice } : d);
+      setDevices(updatedDevices);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, switches: updatedDevices }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Switch Updated", `Updated switch: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Switch Updated",
         description: "The switch device has been successfully updated.",
@@ -81,7 +106,18 @@ const SwitchManagement = () => {
         ...formData as SwitchDevice,
         id: Date.now().toString(),
       };
-      setDevices([...devices, newDevice]);
+      updatedDevices = [...devices, newDevice];
+      setDevices(updatedDevices);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, switches: updatedDevices }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Switch Added", `Added new switch: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Switch Added",
         description: "The new switch device has been successfully added.",
@@ -92,8 +128,14 @@ const SwitchManagement = () => {
     setFormData({});
   };
 
+  const totalPages = Math.ceil(devices.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedDevices = devices.slice(startIndex, startIndex + itemsPerPage);
+
   return (
     <div className="p-6 space-y-6">
+      <ProjectSelector username={username} isAdmin={false} />
+      
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -223,47 +265,63 @@ const SwitchManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {devices.map((device) => (
-                <TableRow key={device.id}>
-                  <TableCell className="font-medium">{device.name}</TableCell>
-                  <TableCell>{device.type}</TableCell>
-                  <TableCell>{device.ports}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        device.status === "Active" ? "default" : 
-                        device.status === "Error" ? "destructive" : 
-                        "secondary"
-                      }
-                    >
-                      {device.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{device.location}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(device)}
-                        className="text-primary hover:text-primary-hover"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(device.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {paginatedDevices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No switch devices found
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                paginatedDevices.map((device) => (
+                  <TableRow key={device.id}>
+                    <TableCell className="font-medium">{device.name}</TableCell>
+                    <TableCell>{device.type}</TableCell>
+                    <TableCell>{device.ports}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          device.status === "Active" ? "default" : 
+                          device.status === "Error" ? "destructive" : 
+                          "secondary"
+                        }
+                      >
+                        {device.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{device.location}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(device)}
+                          className="text-primary hover:text-primary-hover"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(device.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
+          
+          {devices.length > itemsPerPage && (
+            <PaginationCustom
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

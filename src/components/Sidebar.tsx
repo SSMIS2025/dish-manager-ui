@@ -7,7 +7,8 @@ import {
   Router,
   LayoutDashboard,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const navigation = [
   { name: "Motor Management", href: "/motor", icon: Settings, adminOnly: false },
   { name: "Unicable Management", href: "/unicable", icon: Router, adminOnly: false },
   { name: "Satellite Management", href: "/satellite", icon: Satellite, adminOnly: true },
+  { name: "User Activity", href: "/admin/activity", icon: Activity, adminOnly: true },
 ];
 
 const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {

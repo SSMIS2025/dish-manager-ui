@@ -13,7 +13,9 @@ import SwitchManagement from "./pages/SwitchManagement";
 import MotorManagement from "./pages/MotorManagement";
 import UnicableManagement from "./pages/UnicableManagement";
 import SatelliteManagement from "./pages/SatelliteManagement";
+import AdminActivity from "./pages/AdminActivity";
 import NotFound from "./pages/NotFound";
+import { ProjectProvider } from "./contexts/ProjectContext";
 
 const queryClient = new QueryClient();
 
@@ -44,37 +46,42 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <div className="flex h-screen w-full bg-background">
-            <Sidebar 
-              collapsed={sidebarCollapsed} 
-              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-              isAdmin={user.isAdmin}
-            />
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <Header 
-                username={user.username} 
+        <ProjectProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <div className="flex h-screen w-full bg-background">
+              <Sidebar 
+                collapsed={sidebarCollapsed} 
+                onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 isAdmin={user.isAdmin}
-                onLogout={handleLogout}
               />
-              <main className="flex-1 overflow-y-auto">
-                <Routes>
-                  <Route path="/" element={<Dashboard isAdmin={user.isAdmin} />} />
-                  <Route path="/lnb" element={<LNBManagement />} />
-                  <Route path="/switch" element={<SwitchManagement />} />
-                  <Route path="/motor" element={<MotorManagement />} />
-                  <Route path="/unicable" element={<UnicableManagement />} />
-                  {user.isAdmin && (
-                    <Route path="/satellite" element={<SatelliteManagement />} />
-                  )}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <Header 
+                  username={user.username} 
+                  isAdmin={user.isAdmin}
+                  onLogout={handleLogout}
+                />
+                <main className="flex-1 overflow-y-auto">
+                  <Routes>
+                    <Route path="/" element={<Dashboard isAdmin={user.isAdmin} username={user.username} />} />
+                    <Route path="/lnb" element={<LNBManagement username={user.username} />} />
+                    <Route path="/switch" element={<SwitchManagement username={user.username} />} />
+                    <Route path="/motor" element={<MotorManagement username={user.username} />} />
+                    <Route path="/unicable" element={<UnicableManagement username={user.username} />} />
+                    {user.isAdmin && (
+                      <>
+                        <Route path="/satellite" element={<SatelliteManagement username={user.username} />} />
+                        <Route path="/admin/activity" element={<AdminActivity />} />
+                      </>
+                    )}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </main>
+              </div>
             </div>
-          </div>
-        </BrowserRouter>
+          </BrowserRouter>
+        </ProjectProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

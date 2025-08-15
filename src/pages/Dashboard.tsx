@@ -3,13 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { Radio, Zap, Settings, Router, Satellite, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import ProjectSelector from "@/components/ProjectSelector";
+import { useProject } from "@/contexts/ProjectContext";
 
 interface DashboardProps {
   isAdmin: boolean;
+  username: string;
 }
 
-const Dashboard = ({ isAdmin }: DashboardProps) => {
+const Dashboard = ({ isAdmin, username }: DashboardProps) => {
   const navigate = useNavigate();
+  const { currentProject } = useProject();
 
   // Sample data - would be loaded from JSON files
   const stats = [
@@ -68,6 +72,8 @@ const Dashboard = ({ isAdmin }: DashboardProps) => {
           Overview of your satellite equipment database
         </p>
       </div>
+
+      <ProjectSelector username={username} isAdmin={isAdmin} />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

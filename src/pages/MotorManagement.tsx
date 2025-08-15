@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ProjectSelector from "@/components/ProjectSelector";
+import { useProject } from "@/contexts/ProjectContext";
+import { PaginationCustom } from "@/components/ui/pagination-custom";
 
 interface MotorDevice {
   id: string;
@@ -18,17 +21,16 @@ interface MotorDevice {
   status: string;
 }
 
-const MotorManagement = () => {
+interface MotorManagementProps {
+  username: string;
+}
+
+const MotorManagement = ({ username }: MotorManagementProps) => {
   const { toast } = useToast();
-  const [devices, setDevices] = useState<MotorDevice[]>([
-    {
-      id: "1",
-      name: "MT-001",
-      type: "DiSEqC 1.2",
-      position: "28.2°E",
-      status: "Positioned"
-    }
-  ]);
+  const { currentProject, updateProject, logActivity } = useProject();
+  const [devices, setDevices] = useState<MotorDevice[]>(currentProject?.equipment.motors || []);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<MotorDevice | null>(null);
@@ -50,7 +52,19 @@ const MotorManagement = () => {
   };
 
   const handleDelete = (id: string) => {
-    setDevices(devices.filter(d => d.id !== id));
+    const device = devices.find(d => d.id === id);
+    const updatedDevices = devices.filter(d => d.id !== id);
+    setDevices(updatedDevices);
+    
+    if (currentProject) {
+      const updatedProject = {
+        ...currentProject,
+        equipment: { ...currentProject.equipment, motors: updatedDevices }
+      };
+      updateProject(updatedProject);
+      logActivity(username, "Motor Deleted", `Deleted motor: ${device?.name}`, currentProject.id);
+    }
+    
     toast({
       title: "Motor Deleted",
       description: "The motor device has been successfully removed.",
@@ -67,8 +81,20 @@ const MotorManagement = () => {
       return;
     }
 
+    let updatedDevices;
     if (editingDevice) {
-      setDevices(devices.map(d => d.id === editingDevice.id ? { ...formData as MotorDevice } : d));
+      updatedDevices = devices.map(d => d.id === editingDevice.id ? { ...formData as MotorDevice } : d);
+      setDevices(updatedDevices);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, motors: updatedDevices }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Motor Updated", `Updated motor: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Motor Updated",
         description: "The motor device has been successfully updated.",
@@ -78,7 +104,18 @@ const MotorManagement = () => {
         ...formData as MotorDevice,
         id: Date.now().toString(),
       };
-      setDevices([...devices, newDevice]);
+      updatedDevices = [...devices, newDevice];
+      setDevices(updatedDevices);
+      
+      if (currentProject) {
+        const updatedProject = {
+          ...currentProject,
+          equipment: { ...currentProject.equipment, motors: updatedDevices }
+        };
+        updateProject(updatedProject);
+        logActivity(username, "Motor Added", `Added new motor: ${formData.name}`, currentProject.id);
+      }
+      
       toast({
         title: "Motor Added",
         description: "The new motor device has been successfully added.",
@@ -89,8 +126,14 @@ const MotorManagement = () => {
     setFormData({});
   };
 
+  const totalPages = Math.ceil(devices.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedDevices = devices.slice(startIndex, startIndex + itemsPerPage);
+
   return (
     <div className="p-6 space-y-6">
+      <ProjectSelector username={username} isAdmin={false} />
+      
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -203,47 +246,63 @@ const MotorManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {devices.map((device) => (
-                <TableRow key={device.id}>
-                  <TableCell className="font-medium">{device.name}</TableCell>
-                  <TableCell>{device.type}</TableCell>
-                  <TableCell>{device.position}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        device.status === "Positioned" ? "default" : 
-                        device.status === "Error" ? "destructive" : 
-                        device.status === "Moving" ? "secondary" :
-                        "outline"
-                      }
-                    >
-                      {device.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(device)}
-                        className="text-primary hover:text-primary-hover"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(device.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {paginatedDevices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    No motor devices found
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                paginatedDevices.map((device) => (
+                  <TableRow key={device.id}>
+                    <TableCell className="font-medium">{device.name}</TableCell>
+                    <TableCell>{device.type}</TableCell>
+                    <TableCell>{device.position}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          device.status === "Positioned" ? "default" : 
+                          device.status === "Error" ? "destructive" : 
+                          device.status === "Moving" ? "secondary" :
+                          "outline"
+                        }
+                      >
+                        {device.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(device)}
+                          className="text-primary hover:text-primary-hover"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(device.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
+          
+          {devices.length > itemsPerPage && (
+            <PaginationCustom
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

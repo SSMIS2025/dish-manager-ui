@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User, Settings, Clock } from "lucide-react";
+import { useTime } from "@/hooks/useTime";
 
 interface HeaderProps {
   username: string;
@@ -16,7 +17,7 @@ interface HeaderProps {
 }
 
 const Header = ({ username, isAdmin, onLogout }: HeaderProps) => {
-  const currentTime = new Date().toLocaleString();
+  const currentTime = useTime();
 
   return (
     <header className="flex items-center justify-between px-6 py-4 bg-card border-b border-border">
