@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,20 +6,21 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Zap } from "lucide-react";
+import { Plus, Edit, Trash2, Zap, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ProjectSelector from "@/components/ProjectSelector";
-import { useProject } from "@/contexts/ProjectContext";
+import { storageService } from "@/services/storageService";
 import { PaginationCustom } from "@/components/ui/pagination-custom";
 
 interface SwitchDevice {
   id: string;
   name: string;
   type: string;
-  ports: string;
-  status: string;
-  location: string;
+  ports: number;
+  frequency: string;
+  isolation: string;
+  insertionLoss: string;
+  protocol: string;
+  powerConsumption: string;
 }
 
 interface SwitchManagementProps {
@@ -28,8 +29,9 @@ interface SwitchManagementProps {
 
 const SwitchManagement = ({ username }: SwitchManagementProps) => {
   const { toast } = useToast();
-  const { currentProject, updateProject, logActivity } = useProject();
-  const [devices, setDevices] = useState<SwitchDevice[]>(currentProject?.equipment.switches || []);
+  const [devices, setDevices] = useState<SwitchDevice[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   
@@ -37,9 +39,44 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
   const [editingDevice, setEditingDevice] = useState<SwitchDevice | null>(null);
   const [formData, setFormData] = useState<Partial<SwitchDevice>>({});
 
-  const switchTypes = ["DiSEqC 1.0", "DiSEqC 1.1", "DiSEqC 1.2", "22kHz", "Voltage"];
-  const portOptions = ["2", "4", "8", "16"];
-  const statusOptions = ["Active", "Inactive", "Error", "Maintenance"];
+  const switchTypes = ["DiSEqC 1.0", "DiSEqC 1.1", "DiSEqC 2.0", "22kHz Tone", "Voltage Controlled"];
+  const protocols = ["DiSEqC", "22kHz", "Voltage", "Manual"];
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadDevices();
+    }
+  }, [selectedProject]);
+
+  const loadProjects = () => {
+    const allProjects = storageService.getProjects();
+    setProjects(allProjects);
+    if (allProjects.length > 0 && !selectedProject) {
+      setSelectedProject(allProjects[0].id);
+    }
+  };
+
+  const loadDevices = () => {
+    if (selectedProject) {
+      const projectDevices = storageService.getEquipment('switches', selectedProject);
+      const switchDevices: SwitchDevice[] = projectDevices.map(device => ({
+        id: device.id,
+        name: device.name,
+        type: device.type,
+        ports: device.ports || 2,
+        frequency: device.frequency || "",
+        isolation: device.isolation || "",
+        insertionLoss: device.insertionLoss || "",
+        protocol: device.protocol || "",
+        powerConsumption: device.powerConsumption || ""
+      }));
+      setDevices(switchDevices);
+    }
+  };
 
   const handleAdd = () => {
     setEditingDevice(null);
@@ -55,18 +92,10 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
 
   const handleDelete = (id: string) => {
     const device = devices.find(d => d.id === id);
-    const updatedDevices = devices.filter(d => d.id !== id);
-    setDevices(updatedDevices);
+    storageService.deleteEquipment('switches', id);
+    storageService.logActivity(username, "Switch Deleted", `Deleted switch: ${device?.name}`, selectedProject);
     
-    if (currentProject) {
-      const updatedProject = {
-        ...currentProject,
-        equipment: { ...currentProject.equipment, switches: updatedDevices }
-      };
-      updateProject(updatedProject);
-      logActivity(username, "Switch Deleted", `Deleted switch: ${device?.name}`, currentProject.id);
-    }
-    
+    loadDevices();
     toast({
       title: "Switch Deleted",
       description: "The switch device has been successfully removed.",
@@ -83,40 +112,36 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
       return;
     }
 
-    let updatedDevices;
+    if (!selectedProject) {
+      toast({
+        title: "Error",
+        description: "Please select a project first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const deviceData = {
+      ...formData,
+      ports: formData.ports || 2,
+      frequency: formData.frequency || "",
+      isolation: formData.isolation || "",
+      insertionLoss: formData.insertionLoss || "",
+      protocol: formData.protocol || "",
+      powerConsumption: formData.powerConsumption || ""
+    } as Omit<SwitchDevice, 'id'>;
+
     if (editingDevice) {
-      updatedDevices = devices.map(d => d.id === editingDevice.id ? { ...formData as SwitchDevice } : d);
-      setDevices(updatedDevices);
-      
-      if (currentProject) {
-        const updatedProject = {
-          ...currentProject,
-          equipment: { ...currentProject.equipment, switches: updatedDevices }
-        };
-        updateProject(updatedProject);
-        logActivity(username, "Switch Updated", `Updated switch: ${formData.name}`, currentProject.id);
-      }
+      storageService.updateEquipment('switches', editingDevice.id, deviceData);
+      storageService.logActivity(username, "Switch Updated", `Updated switch: ${formData.name}`, selectedProject);
       
       toast({
         title: "Switch Updated",
         description: "The switch device has been successfully updated.",
       });
     } else {
-      const newDevice = {
-        ...formData as SwitchDevice,
-        id: Date.now().toString(),
-      };
-      updatedDevices = [...devices, newDevice];
-      setDevices(updatedDevices);
-      
-      if (currentProject) {
-        const updatedProject = {
-          ...currentProject,
-          equipment: { ...currentProject.equipment, switches: updatedDevices }
-        };
-        updateProject(updatedProject);
-        logActivity(username, "Switch Added", `Added new switch: ${formData.name}`, currentProject.id);
-      }
+      storageService.saveEquipment('switches', { ...deviceData, type: 'switch' }, selectedProject);
+      storageService.logActivity(username, "Switch Added", `Added new switch: ${formData.name}`, selectedProject);
       
       toast({
         title: "Switch Added",
@@ -124,6 +149,7 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
       });
     }
     
+    loadDevices();
     setIsDialogOpen(false);
     setFormData({});
   };
@@ -133,50 +159,76 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
   const paginatedDevices = devices.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="p-6 space-y-6">
-      <ProjectSelector username={username} isAdmin={false} />
-      
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Project Selector */}
+      <Card className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border-orange-200 dark:border-orange-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+            <Zap className="h-5 w-5" />
+            Project Selection
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-4">
+            <Label htmlFor="project">Select Project:</Label>
+            <Select value={selectedProject} onValueChange={setSelectedProject}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Choose a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Zap className="h-8 w-8 text-primary" />
+            <Zap className="h-8 w-8 text-orange-600" />
             Switch Management
           </h2>
           <p className="text-muted-foreground">
-            Manage DiSEqC switches and signal routing devices
+            Manage DiSEqC switches and signal distribution equipment
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button 
               onClick={handleAdd}
-              className="bg-gradient-to-r from-primary to-accent hover:from-primary-hover hover:to-accent-hover"
+              disabled={!selectedProject}
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Switch
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4">
               <DialogTitle>
                 {editingDevice ? "Edit Switch Device" : "Add New Switch Device"}
               </DialogTitle>
               <DialogDescription>
-                Configure the switch specifications and settings
+                Configure switch specifications and connection parameters
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
+                <Label htmlFor="name">Device Name *</Label>
                 <Input
                   id="name"
                   value={formData.name || ""}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter switch name"
+                  placeholder="e.g., 4x1 DiSEqC Switch"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
+                <Label htmlFor="type">Switch Type *</Label>
                 <Select
                   value={formData.type || ""}
                   onValueChange={(value) => setFormData({ ...formData, type: value })}
@@ -192,48 +244,70 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ports">Ports</Label>
-                <Select
-                  value={formData.ports || ""}
-                  onValueChange={(value) => setFormData({ ...formData, ports: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select number of ports" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {portOptions.map((port) => (
-                      <SelectItem key={port} value={port}>{port} ports</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status || ""}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+                <Label htmlFor="ports">Number of Ports</Label>
                 <Input
-                  id="location"
-                  value={formData.location || ""}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Enter installation location"
+                  id="ports"
+                  type="number"
+                  value={formData.ports || 2}
+                  onChange={(e) => setFormData({ ...formData, ports: parseInt(e.target.value) || 2 })}
+                  min="2"
+                  max="16"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="protocol">Protocol</Label>
+                <Select
+                  value={formData.protocol || ""}
+                  onValueChange={(value) => setFormData({ ...formData, protocol: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select protocol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {protocols.map((protocol) => (
+                      <SelectItem key={protocol} value={protocol}>{protocol}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="frequency">Frequency Range</Label>
+                <Input
+                  id="frequency"
+                  value={formData.frequency || ""}
+                  onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                  placeholder="e.g., 950-2150 MHz"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="isolation">Isolation</Label>
+                <Input
+                  id="isolation"
+                  value={formData.isolation || ""}
+                  onChange={(e) => setFormData({ ...formData, isolation: e.target.value })}
+                  placeholder="e.g., 30 dB"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="insertionLoss">Insertion Loss</Label>
+                <Input
+                  id="insertionLoss"
+                  value={formData.insertionLoss || ""}
+                  onChange={(e) => setFormData({ ...formData, insertionLoss: e.target.value })}
+                  placeholder="e.g., 1.5 dB"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="powerConsumption">Power Consumption</Label>
+                <Input
+                  id="powerConsumption"
+                  value={formData.powerConsumption || ""}
+                  onChange={(e) => setFormData({ ...formData, powerConsumption: e.target.value })}
+                  placeholder="e.g., 50 mA"
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
@@ -245,85 +319,116 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Switch Devices ({devices.length})</CardTitle>
-          <CardDescription>
-            Manage your DiSEqC switches and signal routing equipment
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Ports</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedDevices.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No switch devices found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedDevices.map((device) => (
-                  <TableRow key={device.id}>
-                    <TableCell className="font-medium">{device.name}</TableCell>
-                    <TableCell>{device.type}</TableCell>
-                    <TableCell>{device.ports}</TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={
-                          device.status === "Active" ? "default" : 
-                          device.status === "Error" ? "destructive" : 
-                          "secondary"
-                        }
-                      >
-                        {device.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{device.location}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(device)}
-                          className="text-primary hover:text-primary-hover"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(device.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+      <div className="grid gap-6">
+        {!selectedProject ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <p className="text-muted-foreground">Please select a project to view switch devices</p>
+            </CardContent>
+          </Card>
+        ) : paginatedDevices.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <p className="text-muted-foreground">No switch devices found in this project</p>
+            </CardContent>
+          </Card>
+        ) : (
+          paginatedDevices.map((device) => (
+            <Card key={device.id} className="shadow-card animate-scale-in">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">{device.name}</CardTitle>
+                      <CardDescription>
+                        Type: {device.type} • Ports: {device.ports}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(device)}
+                      className="text-primary hover:text-primary-hover"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(device.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2 flex items-center">
+                        <Info className="w-4 h-4 mr-2 text-primary" />
+                        Technical Specifications
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Protocol:</span>
+                          <span>{device.protocol || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Frequency:</span>
+                          <span>{device.frequency || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Isolation:</span>
+                          <span>{device.isolation || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Insertion Loss:</span>
+                          <span>{device.insertionLoss || "Not specified"}</span>
+                        </div>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          
-          {devices.length > itemsPerPage && (
-            <PaginationCustom
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          )}
-        </CardContent>
-      </Card>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2">Configuration</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Ports:</span>
+                          <Badge variant="secondary">{device.ports}</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Power Consumption:</span>
+                          <span>{device.powerConsumption || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Status:</span>
+                          <Badge variant="default">Active</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+      
+      {devices.length > itemsPerPage && (
+        <PaginationCustom
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      )}
     </div>
   );
 };
