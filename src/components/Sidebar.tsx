@@ -34,51 +34,61 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
 
   return (
     <div className={cn(
-      "flex flex-col bg-card border-r border-border transition-all duration-300",
+      "flex flex-col bg-card border-r border-border transition-all duration-500 ease-in-out transform",
       collapsed ? "w-16" : "w-64"
     )}>
       <div className="flex items-center justify-between p-4 border-b border-border">
         {!collapsed && (
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-              <Satellite className="w-5 h-5 text-primary-foreground" />
+          <div className="flex items-center space-x-3 animate-fade-in">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+              <Satellite className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground">SDB Tool</span>
+            <span className="font-bold text-foreground text-lg">SDB Tool</span>
           </div>
         )}
         <Button
           variant="ghost"
           size="sm"
           onClick={onToggle}
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground transition-all duration-300 hover:scale-110 hover:bg-accent/20"
         >
           {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5 animate-fade-in" />
           ) : (
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5 animate-fade-in" />
           )}
         </Button>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
-        {filteredNavigation.map((item) => (
+      <nav className="flex-1 p-4 space-y-3">
+        {filteredNavigation.map((item, index) => (
           <NavLink
             key={item.name}
             to={item.href}
             end={item.href === "/"}
             className={({ isActive }) =>
               cn(
-                "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                "hover:bg-accent/50 hover:text-accent-foreground",
+                "group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105",
+                "hover:bg-gradient-to-r hover:from-accent/20 hover:to-primary/10 hover:text-accent-foreground hover:shadow-md",
+                "border border-transparent hover:border-accent/20",
                 isActive
-                  ? "bg-gradient-to-r from-primary/10 to-accent/10 text-primary border border-primary/20"
-                  : "text-muted-foreground",
-                collapsed ? "justify-center" : "justify-start"
+                  ? "bg-gradient-to-r from-primary/15 to-accent/15 text-primary border-primary/30 shadow-lg scale-105"
+                  : "text-muted-foreground hover:text-foreground",
+                collapsed ? "justify-center" : "justify-start",
+                "animate-fade-in"
               )
             }
+            style={{ animationDelay: `${index * 100}ms` }}
           >
-            <item.icon className={cn("h-5 w-5", !collapsed && "mr-3")} />
-            {!collapsed && <span>{item.name}</span>}
+            <item.icon className={cn(
+              "transition-all duration-300 group-hover:scale-110",
+              collapsed ? "h-7 w-7" : "h-6 w-6 mr-4"
+            )} />
+            {!collapsed && (
+              <span className="animate-fade-in transition-all duration-300">
+                {item.name}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
