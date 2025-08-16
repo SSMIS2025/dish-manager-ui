@@ -18,7 +18,7 @@ const AdminActivity = () => {
   // Filters
   const [usernameFilter, setUsernameFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-  const [projectFilter, setProjectFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
 
   useEffect(() => {
     loadData();
@@ -51,7 +51,7 @@ const AdminActivity = () => {
       );
     }
 
-    if (projectFilter) {
+    if (projectFilter && projectFilter !== "all") {
       filtered = filtered.filter(activity => activity.projectId === projectFilter);
     }
 
@@ -138,7 +138,7 @@ const AdminActivity = () => {
                   <SelectValue placeholder="All projects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All projects</SelectItem>
+                  <SelectItem value="all">All projects</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.name}
