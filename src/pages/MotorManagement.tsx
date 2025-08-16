@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ProjectSelector from "@/components/ProjectSelector";
-import { useProject } from "@/contexts/ProjectContext";
 import { PaginationCustom } from "@/components/ui/pagination-custom";
+import { storageService } from "@/services/storageService";
 
 interface MotorDevice {
   id: string;
@@ -27,14 +26,67 @@ interface MotorManagementProps {
 
 const MotorManagement = ({ username }: MotorManagementProps) => {
   const { toast } = useToast();
-  const { currentProject, updateProject, logActivity } = useProject();
-  const [devices, setDevices] = useState<MotorDevice[]>(currentProject?.equipment.motors || []);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [devices, setDevices] = useState<MotorDevice[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<MotorDevice | null>(null);
   const [formData, setFormData] = useState<Partial<MotorDevice>>({});
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+
+  useEffect(() => {
+    const loadProjects = () => {
+      const savedProjects = storageService.getProjects();
+      setProjects(savedProjects);
+      if (savedProjects.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(savedProjects[0].id);
+      }
+    };
+    loadProjects();
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      const motors = storageService.getEquipment("motors", selectedProjectId);
+      // Convert Equipment to MotorDevice format
+      const motorDevices: MotorDevice[] = motors.map(motor => ({
+        id: motor.id,
+        name: motor.name,
+        type: motor.type,
+        position: motor.position || "",
+        status: motor.status || "Positioned"
+      }));
+      setDevices(motorDevices);
+    }
+  }, [selectedProjectId]);
+
+  const handleCreateProject = () => {
+    if (!newProjectName.trim()) return;
+    
+    const project = storageService.saveProject({
+      name: newProjectName,
+      description: newProjectDescription,
+      createdBy: username
+    });
+    
+    setProjects([...projects, project]);
+    setSelectedProjectId(project.id);
+    setIsCreateProjectOpen(false);
+    setNewProjectName("");
+    setNewProjectDescription("");
+    
+    storageService.logActivity(username, "Project Created", `Created project: ${newProjectName}`, project.id);
+    
+    toast({
+      title: "Project Created",
+      description: `Project "${newProjectName}" has been created successfully.`,
+    });
+  };
 
   const motorTypes = ["DiSEqC 1.2", "DiSEqC 1.3", "USALS", "36V"];
   const statusOptions = ["Positioned", "Moving", "Error", "Calibrating"];
@@ -53,17 +105,13 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
 
   const handleDelete = (id: string) => {
     const device = devices.find(d => d.id === id);
+    
+    storageService.deleteEquipment("motors", id);
+    
     const updatedDevices = devices.filter(d => d.id !== id);
     setDevices(updatedDevices);
     
-    if (currentProject) {
-      const updatedProject = {
-        ...currentProject,
-        equipment: { ...currentProject.equipment, motors: updatedDevices }
-      };
-      updateProject(updatedProject);
-      logActivity(username, "Motor Deleted", `Deleted motor: ${device?.name}`, currentProject.id);
-    }
+    storageService.logActivity(username, "Motor Deleted", `Deleted motor: ${device?.name}`, selectedProjectId);
     
     toast({
       title: "Motor Deleted",
@@ -81,19 +129,14 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
       return;
     }
 
-    let updatedDevices;
     if (editingDevice) {
-      updatedDevices = devices.map(d => d.id === editingDevice.id ? { ...formData as MotorDevice } : d);
+      const updatedDevice = { ...formData as MotorDevice };
+      storageService.updateEquipment("motors", updatedDevice.id, updatedDevice);
+      
+      const updatedDevices = devices.map(d => d.id === editingDevice.id ? updatedDevice : d);
       setDevices(updatedDevices);
       
-      if (currentProject) {
-        const updatedProject = {
-          ...currentProject,
-          equipment: { ...currentProject.equipment, motors: updatedDevices }
-        };
-        updateProject(updatedProject);
-        logActivity(username, "Motor Updated", `Updated motor: ${formData.name}`, currentProject.id);
-      }
+      storageService.logActivity(username, "Motor Updated", `Updated motor: ${formData.name}`, selectedProjectId);
       
       toast({
         title: "Motor Updated",
@@ -104,17 +147,11 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
         ...formData as MotorDevice,
         id: Date.now().toString(),
       };
-      updatedDevices = [...devices, newDevice];
-      setDevices(updatedDevices);
       
-      if (currentProject) {
-        const updatedProject = {
-          ...currentProject,
-          equipment: { ...currentProject.equipment, motors: updatedDevices }
-        };
-        updateProject(updatedProject);
-        logActivity(username, "Motor Added", `Added new motor: ${formData.name}`, currentProject.id);
-      }
+      storageService.saveEquipment("motors", newDevice, selectedProjectId);
+      setDevices([...devices, newDevice]);
+      
+      storageService.logActivity(username, "Motor Added", `Added new motor: ${formData.name}`, selectedProjectId);
       
       toast({
         title: "Motor Added",
@@ -132,7 +169,74 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
 
   return (
     <div className="p-6 space-y-6">
-      <ProjectSelector username={username} isAdmin={false} />
+      {/* Project Selector */}
+      <Card className="sticky top-0 z-10 bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200 shadow-md">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl text-violet-700">Project Selection</CardTitle>
+          <CardDescription>Select or create a project to manage motor devices</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4 items-end">
+            <div className="flex-1">
+              <Label htmlFor="project-select" className="text-violet-700 font-medium">Current Project</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger className="border-violet-200 focus:border-violet-400">
+                  <SelectValue placeholder="Select a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Dialog open={isCreateProjectOpen} onOpenChange={setIsCreateProjectOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Project
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader className="sticky top-0 bg-white z-10 pb-4">
+                  <DialogTitle>Create New Project</DialogTitle>
+                  <DialogDescription>Create a new project for your motor devices</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="project-name">Project Name</Label>
+                    <Input
+                      id="project-name"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="Enter project name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="project-description">Description</Label>
+                    <Input
+                      id="project-description"
+                      value={newProjectDescription}
+                      onChange={(e) => setNewProjectDescription(e.target.value)}
+                      placeholder="Enter project description"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <Button variant="outline" onClick={() => setIsCreateProjectOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateProject} className="bg-gradient-to-r from-violet-600 to-purple-600">
+                      Create Project
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardContent>
+      </Card>
       
       <div className="flex items-center justify-between">
         <div>
@@ -148,14 +252,14 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
           <DialogTrigger asChild>
             <Button 
               onClick={handleAdd}
-              className="bg-gradient-to-r from-primary to-accent hover:from-primary-hover hover:to-accent-hover"
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white transform hover:scale-105 transition-all duration-200"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Motor
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
-            <DialogHeader>
+            <DialogHeader className="sticky top-0 bg-white z-10 pb-4">
               <DialogTitle>
                 {editingDevice ? "Edit Motor Device" : "Add New Motor Device"}
               </DialogTitle>
@@ -219,7 +323,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} className="bg-gradient-to-r from-violet-600 to-purple-600">
                 {editingDevice ? "Update" : "Add"} Motor
               </Button>
             </div>
@@ -227,9 +331,9 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
         </Dialog>
       </div>
 
-      <Card>
+      <Card className="bg-gradient-to-br from-violet-50 to-purple-50 border-violet-200">
         <CardHeader>
-          <CardTitle>Motor Devices ({devices.length})</CardTitle>
+          <CardTitle className="text-violet-700">Motor Devices ({devices.length})</CardTitle>
           <CardDescription>
             Manage your dish positioning motors and actuators
           </CardDescription>
@@ -254,7 +358,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
                 </TableRow>
               ) : (
                 paginatedDevices.map((device) => (
-                  <TableRow key={device.id}>
+                  <TableRow key={device.id} className="hover:bg-violet-50/50">
                     <TableCell className="font-medium">{device.name}</TableCell>
                     <TableCell>{device.type}</TableCell>
                     <TableCell>{device.position}</TableCell>
@@ -276,7 +380,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(device)}
-                          className="text-primary hover:text-primary-hover"
+                          className="text-violet-600 hover:text-violet-700 hover:bg-violet-100"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -284,7 +388,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(device.id)}
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive hover:text-destructive hover:bg-red-50"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
