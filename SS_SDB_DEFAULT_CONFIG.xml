@@ -1,0 +1,485 @@
+<?xml version="1.0" ?>
+<SDB_Generator>
+	<DefaultInfo>
+		<LNB_Block>
+			<LNB_InputInfo>
+				<LnbType>UNIVERSAL</LnbType>
+				<BandType>Cband</BandType>
+				<LowFreq>5150</LowFreq>
+				<HighFreq>5150</HighFreq>
+				<LnbPowerControl>ON</LnbPowerControl>
+				<V_Control>0V</V_Control>
+				<RepeatMode>1</RepeatMode>
+				<kHz>AUTO</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>Cband</BandType>
+				<LowFreq>5750</LowFreq>
+				<HighFreq>5750</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>DUAL</LnbType>
+				<BandType>Universalband</BandType>
+				<LowFreq>97500</LowFreq>
+				<HighFreq>10600</HighFreq>
+				<LnbPowerControl>ON</LnbPowerControl>
+				<V_Control>None</V_Control>
+				<RepeatMode>1</RepeatMode>
+				<kHz>OFF</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>Kuband</BandType>
+				<LowFreq>11300</LowFreq>
+				<HighFreq>11300</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>None</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>UNIVERSAL</LnbType>
+				<BandType>Ku-band</BandType>
+				<LowFreq>10742</LowFreq>
+				<HighFreq>10742</HighFreq>
+				<LnbPowerControl>ON</LnbPowerControl>
+				<V_Control>0V</V_Control>
+				<RepeatMode>None</RepeatMode>
+				<kHz>AUTO</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>Ku-band</BandType>
+				<LowFreq>10600</LowFreq>
+				<HighFreq>10600</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>None</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>UNIVERSAL</LnbType>
+				<BandType>Ku-band</BandType>
+				<LowFreq>10700</LowFreq>
+				<HighFreq>10700</HighFreq>
+				<LnbPowerControl>ON</LnbPowerControl>
+				<V_Control>0V</V_Control>
+				<RepeatMode>1</RepeatMode>
+				<kHz>AUTO</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>Ku-band</BandType>
+				<LowFreq>10750</LowFreq>
+				<HighFreq>10750</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>DMDU/MDU</BandType>
+				<LowFreq>10450</LowFreq>
+				<HighFreq>10000</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>MDU2"</BandType>
+				<LowFreq>9925</LowFreq>
+				<HighFreq>9550</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>UNIVERSAL</LnbType>
+				<BandType>MDU4"</BandType>
+				<LowFreq>13035</LowFreq>
+				<HighFreq>12650</HighFreq>
+				<LnbPowerControl>ON</LnbPowerControl>
+				<V_Control>0V</V_Control>
+				<RepeatMode>1</RepeatMode>
+				<kHz>AUTO</kHz>
+			</LNB_InputInfo>
+
+			<LNB_InputInfo>
+				<LnbType>SINGLE</LnbType>
+				<BandType>MDU5"</BandType>
+				<LowFreq>12584</LowFreq>
+				<HighFreq>12894</HighFreq>
+				<LnbPowerControl>OFF</LnbPowerControl>
+				<V_Control>12V</V_Control>
+				<RepeatMode>2</RepeatMode>
+				<kHz>ON</kHz>
+			</LNB_InputInfo>
+		</LNB_Block>
+
+		<SWITCH_Block>
+				<SWITCH_InputInfo type="ToneBurst"  NoOfSwitches="2">
+					<switch>A</switch>
+					<switch>B</switch>
+				</SWITCH_InputInfo>
+
+				<SWITCH_InputInfo type="DiSEqC1p0" NoOfSwitches="4">
+					<switch>A</switch>
+					<switch>B</switch>
+					<switch>c</switch>
+					<switch>D</switch>
+				</SWITCH_InputInfo>
+
+				<SWITCH_InputInfo type="DiSEqC1p1" NoOfSwitches="16">
+					<switch>1</switch>
+					<switch>2</switch>
+					<switch>3</switch>
+					<switch>4</switch>
+					<switch>5</switch>
+					<switch>6</switch>
+					<switch>7</switch>
+					<switch>8</switch>
+					<switch>9</switch>
+					<switch>10</switch>
+					<switch>11</switch>
+					<switch>12</switch>
+					<switch>13</switch>
+					<switch>14</switch>
+					<switch>15</switch>
+					<switch>16</switch>
+				</SWITCH_InputInfo>
+		</SWITCH_Block>
+
+		<MOTOR_Block>
+				<MOTOR_InputInfo type="DiSEqC1p2" Start_Position="0" End_Position="49">
+				</MOTOR_InputInfo>
+
+				<MOTOR_InputInfo type="DiSEqC1p3">
+					<Longitude>013.0</Longitude>
+					<EastorWest>E</EastorWest>
+					<Latitude>42</Latitude>
+					<NorthorSouth>N</NorthorSouth>
+				</MOTOR_InputInfo>
+		</MOTOR_Block>
+
+		<UNICABLE_CONFIGURATION_Block>
+			<UNICABLE_InputInfo type="DSCR">
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>1</Slot_No>
+					<IF_Frequency>1210</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>A</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>2</Slot_No>
+					<IF_Frequency>1420</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>B</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>3</Slot_No>
+					<IF_Frequency>1680</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>A</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>4</Slot_No>
+					<IF_Frequency>2040</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>B</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>5</Slot_No>
+					<IF_Frequency>985</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>6</Slot_No>
+					<IF_Frequency>1050</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>7</Slot_No>
+					<IF_Frequency>1115</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>8</Slot_No>
+					<IF_Frequency>1275</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>9</Slot_No>
+					<IF_Frequency>1340</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>10</Slot_No>
+					<IF_Frequency>1480</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>11</Slot_No>
+					<IF_Frequency>1550</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>12</Slot_No>
+					<IF_Frequency>1615</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>13</Slot_No>
+					<IF_Frequency>1745</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>14</Slot_No>
+					<IF_Frequency>1810</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>15</Slot_No>
+					<IF_Frequency>1875</IF_Frequency>
+				</DSCR_InputInfo>
+
+				<DSCR_InputInfo>
+					<Port>None</Port>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>16</Slot_No>
+					<IF_Frequency>1940</IF_Frequency>
+				</DSCR_InputInfo>
+			</UNICABLE_InputInfo>
+			<UNICABLE_InputInfo type="DCSS">
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>1</Slot_No>
+					<IF_Frequency>1210</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>2</Slot_No>
+					<IF_Frequency>1420</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>3</Slot_No>
+					<IF_Frequency>1680</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>4</Slot_No>
+					<IF_Frequency>2040</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>5</Slot_No>
+					<IF_Frequency>985</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>6</Slot_No>
+					<IF_Frequency>1050</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>7</Slot_No>
+					<IF_Frequency>1115</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>8</Slot_No>
+					<IF_Frequency>1275</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>9</Slot_No>
+					<IF_Frequency>1340</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>10</Slot_No>
+					<IF_Frequency>1480</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>11</Slot_No>
+					<IF_Frequency>1550</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>12</Slot_No>
+					<IF_Frequency>1615</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>13</Slot_No>
+					<IF_Frequency>1745</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>14</Slot_No>
+					<IF_Frequency>1810</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>15</Slot_No>
+					<IF_Frequency>1875</IF_Frequency>
+				</DCSS_InputInfo>
+
+				<DCSS_InputInfo>
+					<DSCR_Status>OFF</DSCR_Status>
+					<Slot_No>16</Slot_No>
+					<IF_Frequency>1940</IF_Frequency>
+				</DCSS_InputInfo>
+			</UNICABLE_InputInfo>
+		</UNICABLE_CONFIGURATION_Block>
+
+		<Satellite_Block>
+			<Satellite_Info>
+				<LNB_InputInfo>
+					<LnbType>SINGLE</LnbType>
+					<BandType>MDU2"</BandType>
+					<LowFreq>9925</LowFreq>
+					<HighFreq>9550</HighFreq>
+					<LnbPowerControl>OFF</LnbPowerControl>
+					<V_Control>12V</V_Control>
+					<RepeatMode>2</RepeatMode>
+					<kHz>ON</kHz>
+				</LNB_InputInfo>
+				<SWITCH>
+						<SWITCH_InputInfo type="ToneBurst" Switch="A"></SWITCH_InputInfo>
+						<SWITCH_InputInfo type="DiSEqC1p0" Switch="B"></SWITCH_InputInfo>
+				</SWITCH>
+				<MOTOR>
+					<MOTOR_InputInfo type="DiSEqC1p3">
+						<Longitude>013.0</Longitude>
+						<EastorWest>E</EastorWest>
+						<Latitude>42</Latitude>
+						<NorthorSouth>N</NorthorSouth>
+					</MOTOR_InputInfo>
+				</MOTOR>
+
+				<UNICABLE_CONFIGURATION>
+					<UNICABLE_InputInfo type="DSCR">
+						<Port>None</Port>
+						<DSCR_Status>OFF</DSCR_Status>
+						<Slot_No>1</Slot_No>
+						<IF_Frequency>1210</IF_Frequency>
+					</UNICABLE_InputInfo>
+				</UNICABLE_CONFIGURATION>
+
+				<CARRIER_Block>
+					<CARRIER_InputInfo>
+						<CarrierName>Carrier1</CarrierName>
+						<Frequency>10700</Frequency>
+						<Polarization>Horizantal</Polarization>
+						<SymbolRate>22000</SymbolRate>
+						<FEC>12.9</FEC>
+						<FECMode>DVBS</FECMode>
+						<FactoryDefault>0</FactoryDefault>
+					</CARRIER_InputInfo>
+				</CARRIER_Block>
+
+				<SERVICE_Block>
+					<SERVICE_InputInfo>
+						<ServiceName>Service1</ServiceName>
+						<ServiceType>TV</ServiceType>
+						<VideoPID>8192</VideoPID>
+						<VideoPID>8192</VideoPID>
+						<PCRPID>8192</PCRPID>
+						<ProgramNumber>1</ProgramNumber>
+						<FavGroup>Group1</FavGroup>
+						<FactoryDefault>0</FactoryDefault>
+						<Preference>0</Preference>
+						<Scramble>0</Scramble>
+					</SERVICE_InputInfo>
+				</SERVICE_Block>
+			</Satellite_Info>
+		</Satellite_Block>
+		<USER_SETTINGS_CONFIGURATION_Block>
+			<USER_SETTINGS_InputInfo>
+				<OutputFormat>4:3</OutputFormat>
+				<DisplayMode>RGB</DisplayMode>
+				<TV_Format>Auto</TV_Format>
+				<Display_OSD_Mode>OFF</Display_OSD_Mode>
+				<Password>XXX</Password>
+				<OSD_Language>Languages list</OSD_Language>
+				<FirstAudioLanguage>Languages list</FirstAudioLanguage>
+				<SubtitleDefLanguage>Languages list</SubtitleDefLanguage>
+				<Volume>10</Volume>
+				<ThemesLevel>0</ThemesLevel>
+				<TransparencyLevel>20</TransparencyLevel>
+				<SubtitleStatus>OFF</SubtitleStatus>
+				<TeletextStatus>OFF</TeletextStatus>
+			</USER_SETTINGS_InputInfo>
+		</USER_SETTINGS_CONFIGURATION_Block>
+	</DefaultInfo>
+
+	<ProjectSpecInfo>
+		<projectname T4="1">
+		</projectname>
+	</ProjectSpecInfo>
+	<UserInfo>
+		<projectname T4="1">
+		</projectname>
+	</UserInfo>
+</SDB_Generator>
