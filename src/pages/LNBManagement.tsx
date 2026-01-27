@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Radio, Info } from "lucide-react";
+import { Plus, Radio } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { storageService } from "@/services/storageService";
-import { PaginationCustom } from "@/components/ui/pagination-custom";
+import { apiService } from "@/services/apiService";
+import { EquipmentTable } from "@/components/EquipmentTable";
 
 interface LNBDevice {
   id: string;
@@ -32,11 +32,6 @@ interface LNBManagementProps {
 const LNBManagement = ({ username }: LNBManagementProps) => {
   const { toast } = useToast();
   const [devices, setDevices] = useState<LNBDevice[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
-  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<LNBDevice | null>(null);
   const [formData, setFormData] = useState<Partial<LNBDevice>>({});
@@ -46,42 +41,25 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
   const polarizations = ["Horizontal", "Vertical", "Circular"];
 
   useEffect(() => {
-    loadProjects();
+    loadDevices();
   }, []);
 
-  useEffect(() => {
-    if (selectedProject) {
-      loadDevices();
-    }
-  }, [selectedProject]);
-
-  const loadProjects = () => {
-    const allProjects = storageService.getProjects();
-    setProjects(allProjects);
-    if (allProjects.length > 0 && !selectedProject) {
-      setSelectedProject(allProjects[0].id);
-    }
-  };
-
-  const loadDevices = () => {
-    if (selectedProject) {
-      const projectDevices = storageService.getEquipment('lnbs', selectedProject);
-      // Transform Equipment to LNBDevice
-      const lnbDevices: LNBDevice[] = projectDevices.map(device => ({
-        id: device.id,
-        name: device.name,
-        type: device.type,
-        frequency: device.frequency || "",
-        polarization: device.polarization || "",
-        skew: device.skew || "",
-        band: device.band || "",
-        noiseFigure: device.noiseFigure || "",
-        localOscillator: device.localOscillator || "",
-        gain: device.gain || "",
-        testResult: device.testResult || "Not Tested"
-      }));
-      setDevices(lnbDevices);
-    }
+  const loadDevices = async () => {
+    const allDevices = await apiService.getEquipment('lnbs');
+    const lnbDevices: LNBDevice[] = allDevices.map(device => ({
+      id: device.id,
+      name: device.name,
+      type: device.type,
+      frequency: device.frequency || "",
+      polarization: device.polarization || "",
+      skew: device.skew || "",
+      band: device.band || "",
+      noiseFigure: device.noiseFigure || "",
+      localOscillator: device.localOscillator || "",
+      gain: device.gain || "",
+      testResult: device.testResult || "Not Tested"
+    }));
+    setDevices(lnbDevices);
   };
 
   const handleAdd = () => {
@@ -96,10 +74,10 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const device = devices.find(d => d.id === id);
-    storageService.deleteEquipment('lnbs', id);
-    storageService.logActivity(username, "LNB Deleted", `Deleted LNB: ${device?.name}`, selectedProject);
+    await apiService.deleteEquipment('lnbs', id);
+    await apiService.logActivity(username, "LNB Deleted", `Deleted LNB: ${device?.name}`, 'global');
     
     loadDevices();
     toast({
@@ -108,7 +86,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.type) {
       toast({
         title: "Validation Error",
@@ -118,17 +96,20 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       return;
     }
 
-    if (!selectedProject) {
+    // Check for duplicates
+    const isDuplicate = await apiService.checkDuplicate('lnbs', formData.name!, editingDevice?.id);
+    if (isDuplicate) {
       toast({
-        title: "Error",
-        description: "Please select a project first.",
+        title: "Duplicate Entry",
+        description: "An LNB with this name already exists.",
         variant: "destructive",
       });
       return;
     }
 
     const deviceData = {
-      ...formData,
+      name: formData.name,
+      type: formData.type,
       frequency: formData.frequency || "",
       polarization: formData.polarization || "",
       skew: formData.skew || "",
@@ -137,19 +118,19 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       localOscillator: formData.localOscillator || "",
       gain: formData.gain || "",
       testResult: formData.testResult || "Not Tested"
-    } as Omit<LNBDevice, 'id'>;
+    };
 
     if (editingDevice) {
-      storageService.updateEquipment('lnbs', editingDevice.id, deviceData);
-      storageService.logActivity(username, "LNB Updated", `Updated LNB: ${formData.name}`, selectedProject);
+      await apiService.updateEquipment('lnbs', editingDevice.id, deviceData);
+      await apiService.logActivity(username, "LNB Updated", `Updated LNB: ${formData.name}`, 'global');
       
       toast({
         title: "LNB Updated",
         description: "The LNB device has been successfully updated.",
       });
     } else {
-      storageService.saveEquipment('lnbs', { ...deviceData, type: 'lnb' }, selectedProject);
-      storageService.logActivity(username, "LNB Added", `Added new LNB: ${formData.name}`, selectedProject);
+      await apiService.saveEquipment('lnbs', deviceData);
+      await apiService.logActivity(username, "LNB Added", `Added new LNB: ${formData.name}`, 'global');
       
       toast({
         title: "LNB Added",
@@ -162,63 +143,52 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
     setFormData({});
   };
 
-  const totalPages = Math.ceil(devices.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedDevices = devices.slice(startIndex, startIndex + itemsPerPage);
+  const columns = [
+    { key: 'name', label: 'Name', sortable: true },
+    { key: 'type', label: 'Type', sortable: true },
+    { key: 'band', label: 'Band', sortable: true },
+    { key: 'frequency', label: 'Frequency' },
+    { key: 'polarization', label: 'Polarization' },
+    { 
+      key: 'testResult', 
+      label: 'Test Result',
+      render: (value: string) => (
+        <Badge variant={value === 'Passed' ? 'default' : value === 'Failed' ? 'destructive' : 'secondary'}>
+          {value || 'Not Tested'}
+        </Badge>
+      )
+    }
+  ];
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      {/* Project Selector */}
-      <Card className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
-            <Radio className="h-5 w-5" />
-            Project Selection
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-4">
-            <Label htmlFor="project">Select Project:</Label>
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Choose a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Radio className="h-8 w-8 text-green-600" />
+            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+              <Radio className="h-5 w-5 text-white" />
+            </div>
             LNB Management
           </h2>
-          <p className="text-muted-foreground">
-            Manage Low Noise Block downconverters for satellite reception
+          <p className="text-muted-foreground mt-1">
+            Global bucket - Manage all LNB devices across projects
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button 
               onClick={handleAdd}
-              disabled={!selectedProject}
               className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add LNB
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4">
-              <DialogTitle>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2">
+                <Radio className="h-5 w-5 text-green-600" />
                 {editingDevice ? "Edit LNB Device" : "Add New LNB Device"}
               </DialogTitle>
               <DialogDescription>
@@ -349,7 +319,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} className="bg-gradient-to-r from-green-500 to-green-600">
                 {editingDevice ? "Update" : "Add"} LNB
               </Button>
             </div>
@@ -357,124 +327,21 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
         </Dialog>
       </div>
 
-      <div className="grid gap-6">
-        {!selectedProject ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <p className="text-muted-foreground">Please select a project to view LNB devices</p>
-            </CardContent>
-          </Card>
-        ) : paginatedDevices.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <p className="text-muted-foreground">No LNB devices found in this project</p>
-            </CardContent>
-          </Card>
-        ) : (
-          paginatedDevices.map((device) => (
-            <Card key={device.id} className="shadow-card animate-scale-in">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                      <Radio className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl">{device.name}</CardTitle>
-                      <CardDescription>
-                        Type: {device.type} • Band: {device.band || "Not specified"}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(device)}
-                      className="text-primary hover:text-primary-hover"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(device.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold mb-2 flex items-center">
-                        <Info className="w-4 h-4 mr-2 text-primary" />
-                        Technical Specifications
-                      </h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Frequency:</span>
-                          <span>{device.frequency || "Not specified"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Polarization:</span>
-                          <span>{device.polarization || "Not specified"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Skew:</span>
-                          <span>{device.skew || "Not specified"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Noise Figure:</span>
-                          <span>{device.noiseFigure || "Not specified"}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold mb-2">Performance</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Local Oscillator:</span>
-                          <span>{device.localOscillator || "Not specified"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Gain:</span>
-                          <span>{device.gain || "Not specified"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Test Status:</span>
-                          <Badge 
-                            variant={
-                              device.testResult === "Passed" ? "default" : 
-                              device.testResult === "Failed" ? "destructive" : 
-                              "secondary"
-                            }
-                          >
-                            {device.testResult || "Not Tested"}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-      
-      {devices.length > itemsPerPage && (
-        <PaginationCustom
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
-      )}
+      {/* Table */}
+      <Card>
+        <CardContent className="p-6">
+          <EquipmentTable
+            data={devices}
+            columns={columns}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            itemsPerPage={20}
+            searchPlaceholder="Search LNBs..."
+            emptyMessage="No LNB devices found. Click 'Add LNB' to create one."
+            colorScheme="green"
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 };

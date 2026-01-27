@@ -14,6 +14,7 @@ import SwitchManagement from "./pages/SwitchManagement";
 import MotorManagement from "./pages/MotorManagement";
 import UnicableManagement from "./pages/UnicableManagement";
 import SatelliteManagement from "./pages/SatelliteManagement";
+import ProjectMapping from "./pages/ProjectMapping";
 import AdminActivity from "./pages/AdminActivity";
 import NotFound from "./pages/NotFound";
 import { storageService } from "./services/storageService";
@@ -101,6 +102,7 @@ const App = () => {
                   <Route path="/switch" element={<SwitchManagement username={user.username} />} />
                   <Route path="/motor" element={<MotorManagement username={user.username} />} />
                   <Route path="/unicable" element={<UnicableManagement username={user.username} />} />
+                  <Route path="/project-mapping" element={<ProjectMapping username={user.username} />} />
                   {user.isAdmin && (
                     <>
                       <Route path="/satellite" element={<SatelliteManagement username={user.username} />} />
