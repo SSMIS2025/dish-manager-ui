@@ -8,7 +8,9 @@ import {
   LayoutDashboard,
   ChevronLeft,
   ChevronRight,
-  Activity
+  Activity,
+  FolderOpen,
+  RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,10 +25,11 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, adminOnly: false },
   { name: "LNB Management", href: "/lnb", icon: Radio, adminOnly: false },
   { name: "Switch Management", href: "/switch", icon: Zap, adminOnly: false },
-  { name: "Motor Management", href: "/motor", icon: Settings, adminOnly: false },
-  { name: "Unicable Management", href: "/unicable", icon: Router, adminOnly: false },
-  { name: "Satellite Management", href: "/satellite", icon: Satellite, adminOnly: true },
-  { name: "User Activity", href: "/admin/activity", icon: Activity, adminOnly: true },
+  { name: "Motor Management", href: "/motor", icon: RotateCcw, adminOnly: false },
+  { name: "Unicable Management", href: "/unicable", icon: Activity, adminOnly: false },
+  { name: "Satellite", href: "/satellite", icon: Satellite, adminOnly: true },
+  { name: "Project Mapping", href: "/project-mapping", icon: FolderOpen, adminOnly: false },
+  { name: "User Activity", href: "/admin/activity", icon: Settings, adminOnly: true },
 ];
 
 const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {

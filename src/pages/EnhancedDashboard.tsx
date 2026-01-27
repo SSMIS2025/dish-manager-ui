@@ -13,7 +13,7 @@ import {
   Users,
   Clock
 } from "lucide-react";
-import { storageService } from "@/services/storageService";
+import { apiService } from "@/services/apiService";
 
 interface DashboardProps {
   username: string;
@@ -36,21 +36,28 @@ const EnhancedDashboard = ({ username }: DashboardProps) => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    const allProjects = storageService.getProjects();
-    const allActivities = storageService.getActivities().slice(0, 5);
+  const loadData = async () => {
+    const [allProjects, allActivities, lnbs, switches, motors, unicables, satellites] = await Promise.all([
+      apiService.getProjects(),
+      apiService.getActivities(),
+      apiService.getEquipment('lnbs'),
+      apiService.getEquipment('switches'),
+      apiService.getEquipment('motors'),
+      apiService.getEquipment('unicables'),
+      apiService.getSatellites()
+    ]);
     
     setProjects(allProjects);
-    setActivities(allActivities);
+    setActivities(allActivities.slice(0, 5));
     
     setStats({
       totalProjects: allProjects.length,
-      totalLNBs: storageService.getEquipment('lnbs').length,
-      totalSwitches: storageService.getEquipment('switches').length,
-      totalMotors: storageService.getEquipment('motors').length,
-      totalUnicables: storageService.getEquipment('unicables').length,
-      totalSatellites: storageService.getEquipment('satellites').length,
-      recentActivities: allActivities.length
+      totalLNBs: lnbs.length,
+      totalSwitches: switches.length,
+      totalMotors: motors.length,
+      totalUnicables: unicables.length,
+      totalSatellites: satellites.length,
+      recentActivities: allActivities.slice(0, 5).length
     });
   };
 
