@@ -1,38 +1,52 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, ChevronRight, Settings } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, Loader2, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
-import { EquipmentTable } from "@/components/EquipmentTable";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Carrier {
   id: string;
   name: string;
   frequency: string;
-  frequencyType: string;
   polarization: string;
   symbolRate: string;
   fec: string;
-  modulation: string;
+  fecMode: string;
+  factoryDefault: boolean;
   services: Service[];
 }
 
 interface Service {
   id: string;
   name: string;
-  type: string;
-  sid: string;
-  vpid: string;
-  apid: string;
+  frequency: string;
+  videoPid: string;
+  pcrPid: string;
+  programNumber: string;
+  favGroup: string;
+  factoryDefault: boolean;
+  preference: string;
+  scramble: boolean;
 }
 
 interface SatelliteData {
@@ -42,10 +56,10 @@ interface SatelliteData {
   age: string;
   direction: string;
   carriers: Carrier[];
-  mappedLnbs: string[];
-  mappedSwitches: string[];
-  mappedMotors: string[];
-  mappedUnicables: string[];
+  mappedLnb: string;
+  mappedSwitch: string;
+  mappedMotor: string;
+  mappedUnicable: string;
 }
 
 interface SatelliteManagementProps {
@@ -59,8 +73,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCarrierDialogOpen, setIsCarrierDialogOpen] = useState(false);
   const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
+  const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [editingSatellite, setEditingSatellite] = useState<SatelliteData | null>(null);
   const [formData, setFormData] = useState<Partial<SatelliteData>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   
   // Equipment lists for mapping
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
@@ -70,16 +88,21 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   
   // Carrier form
   const [selectedCarrier, setSelectedCarrier] = useState<Carrier | null>(null);
+  const [editingCarrier, setEditingCarrier] = useState<Carrier | null>(null);
   const [carrierFormData, setCarrierFormData] = useState<Partial<Carrier>>({});
   
   // Service form
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceFormData, setServiceFormData] = useState<Partial<Service>>({});
 
+  const nameRef = useRef<HTMLInputElement>(null);
+  const carrierNameRef = useRef<HTMLInputElement>(null);
+  const serviceNameRef = useRef<HTMLInputElement>(null);
+
   const directions = ["East", "West"];
-  const frequencyTypes = ["DVB-S", "DVB-S2", "DVB-S2X"];
   const polarizations = ["Horizontal", "Vertical", "Left Circular", "Right Circular"];
-  const modulations = ["QPSK", "8PSK", "16APSK", "32APSK"];
-  const serviceTypes = ["TV", "Radio", "Data", "HD", "UHD"];
+  const fecOptions = ["1/2", "2/3", "3/4", "5/6", "7/8", "Auto"];
+  const fecModes = ["DVB-S", "DVB-S2", "DVB-S2X", "Auto"];
 
   useEffect(() => {
     loadSatellites();
@@ -87,20 +110,25 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   }, []);
 
   const loadSatellites = async () => {
-    const allSatellites = await apiService.getSatellites();
-    const satelliteData: SatelliteData[] = allSatellites.map(sat => ({
-      id: sat.id,
-      name: sat.name,
-      position: sat.position || "",
-      age: sat.age || "",
-      direction: sat.direction || "",
-      carriers: sat.carriers || [],
-      mappedLnbs: sat.mappedLnbs || [],
-      mappedSwitches: sat.mappedSwitches || [],
-      mappedMotors: sat.mappedMotors || [],
-      mappedUnicables: sat.mappedUnicables || []
-    }));
-    setSatellites(satelliteData);
+    setIsLoading(true);
+    try {
+      const allSatellites = await apiService.getSatellites();
+      const satelliteData: SatelliteData[] = allSatellites.map(sat => ({
+        id: sat.id,
+        name: sat.name,
+        position: sat.position || "",
+        age: sat.age || "",
+        direction: sat.direction || "",
+        carriers: sat.carriers || [],
+        mappedLnb: sat.mappedLnb || "",
+        mappedSwitch: sat.mappedSwitch || "",
+        mappedMotor: sat.mappedMotor || "",
+        mappedUnicable: sat.mappedUnicable || ""
+      }));
+      setSatellites(satelliteData);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const loadEquipment = async () => {
@@ -118,8 +146,9 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   const handleAdd = () => {
     setEditingSatellite(null);
-    setFormData({ carriers: [], mappedLnbs: [], mappedSwitches: [], mappedMotors: [], mappedUnicables: [] });
+    setFormData({ carriers: [] });
     setIsDialogOpen(true);
+    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEdit = (satellite: SatelliteData) => {
@@ -128,255 +157,286 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    const satellite = satellites.find(s => s.id === id);
-    await apiService.deleteEquipment('satellites', id);
-    await apiService.logActivity(username, "Satellite Deleted", `Deleted satellite: ${satellite?.name}`, 'global');
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     
-    if (selectedSatellite?.id === id) {
-      setSelectedSatellite(null);
+    setIsLoading(true);
+    try {
+      if (deleteTarget.type === 'satellite') {
+        const satellite = satellites.find(s => s.id === deleteTarget.id);
+        await apiService.deleteEquipment('satellites', deleteTarget.id);
+        await apiService.logActivity(username, "Satellite Deleted", `Deleted satellite: ${satellite?.name}`, 'global');
+        
+        if (selectedSatellite?.id === deleteTarget.id) {
+          setSelectedSatellite(null);
+        }
+        loadSatellites();
+        toast({ title: "Satellite Deleted", description: "The satellite and all its carriers/services have been removed." });
+      } else if (deleteTarget.type === 'carrier' && selectedSatellite) {
+        // Delete carrier and its services
+        const updatedCarriers = selectedSatellite.carriers.filter(c => c.id !== deleteTarget.id);
+        const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+        await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+        setSelectedSatellite(updatedSatellite);
+        if (selectedCarrier?.id === deleteTarget.id) {
+          setSelectedCarrier(null);
+        }
+        loadSatellites();
+        toast({ title: "Carrier Deleted", description: "The carrier and all its services have been removed." });
+      } else if (deleteTarget.type === 'service' && selectedSatellite && deleteTarget.carrierId) {
+        const updatedCarriers = selectedSatellite.carriers.map(c => {
+          if (c.id === deleteTarget.carrierId) {
+            return { ...c, services: c.services.filter(s => s.id !== deleteTarget.id) };
+          }
+          return c;
+        });
+        const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+        await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+        setSelectedSatellite(updatedSatellite);
+        if (selectedCarrier?.id === deleteTarget.carrierId) {
+          setSelectedCarrier({ ...selectedCarrier, services: selectedCarrier.services.filter(s => s.id !== deleteTarget.id) });
+        }
+        loadSatellites();
+        toast({ title: "Service Deleted", description: "The service has been removed." });
+      }
+    } finally {
+      setIsLoading(false);
+      setDeleteTarget(null);
     }
-    
-    loadSatellites();
-    toast({
-      title: "Satellite Deleted",
-      description: "The satellite has been successfully removed.",
-    });
+  };
+
+  const validateSatelliteForm = (): boolean => {
+    if (!formData.name?.trim()) {
+      toast({ title: "Validation Error", description: "Satellite name is required.", variant: "destructive" });
+      nameRef.current?.focus();
+      return false;
+    }
+    if (!formData.position?.trim()) {
+      toast({ title: "Validation Error", description: "Position is required.", variant: "destructive" });
+      return false;
+    }
+    return true;
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.position) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in satellite name and position.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!validateSatelliteForm()) return;
 
-    const satelliteData = {
-      name: formData.name,
-      position: formData.position,
-      age: formData.age || "",
-      direction: formData.direction || "",
-      carriers: formData.carriers || [],
-      mappedLnbs: formData.mappedLnbs || [],
-      mappedSwitches: formData.mappedSwitches || [],
-      mappedMotors: formData.mappedMotors || [],
-      mappedUnicables: formData.mappedUnicables || []
-    };
+    setIsSaving(true);
+    try {
+      const satelliteData = {
+        name: formData.name!,
+        position: formData.position!,
+        age: formData.age || "",
+        direction: formData.direction || "",
+        carriers: formData.carriers || [],
+        mappedLnb: formData.mappedLnb || "",
+        mappedSwitch: formData.mappedSwitch || "",
+        mappedMotor: formData.mappedMotor || "",
+        mappedUnicable: formData.mappedUnicable || ""
+      };
 
-    if (editingSatellite) {
-      await apiService.updateSatellite(editingSatellite.id, satelliteData);
-      await apiService.logActivity(username, "Satellite Updated", `Updated satellite: ${formData.name}`, 'global');
+      if (editingSatellite) {
+        await apiService.updateSatellite(editingSatellite.id, satelliteData);
+        await apiService.logActivity(username, "Satellite Updated", `Updated satellite: ${formData.name}`, 'global');
+        toast({ title: "Satellite Updated", description: "The satellite has been successfully updated." });
+      } else {
+        await apiService.saveSatellite(satelliteData);
+        await apiService.logActivity(username, "Satellite Added", `Added new satellite: ${formData.name}`, 'global');
+        toast({ title: "Satellite Added", description: "The new satellite has been successfully added." });
+      }
       
-      toast({
-        title: "Satellite Updated",
-        description: "The satellite has been successfully updated.",
-      });
-    } else {
-      await apiService.saveSatellite(satelliteData);
-      await apiService.logActivity(username, "Satellite Added", `Added new satellite: ${formData.name}`, 'global');
-      
-      toast({
-        title: "Satellite Added",
-        description: "The new satellite has been successfully added.",
-      });
+      loadSatellites();
+      setIsDialogOpen(false);
+      setFormData({});
+    } finally {
+      setIsSaving(false);
     }
-    
-    loadSatellites();
-    setIsDialogOpen(false);
-    setFormData({});
   };
 
   const handleSelectSatellite = (satellite: SatelliteData) => {
     setSelectedSatellite(satellite);
+    setSelectedCarrier(null);
   };
 
   // Carrier management
   const handleAddCarrier = () => {
-    setSelectedCarrier(null);
-    setCarrierFormData({ services: [] });
+    setEditingCarrier(null);
+    setCarrierFormData({ services: [], factoryDefault: false });
     setIsCarrierDialogOpen(true);
+    setTimeout(() => carrierNameRef.current?.focus(), 100);
   };
 
   const handleEditCarrier = (carrier: Carrier) => {
-    setSelectedCarrier(carrier);
+    setEditingCarrier(carrier);
     setCarrierFormData(carrier);
     setIsCarrierDialogOpen(true);
   };
 
-  const handleSaveCarrier = async () => {
-    if (!carrierFormData.name || !carrierFormData.frequency) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in carrier name and frequency.",
-        variant: "destructive",
-      });
-      return;
+  const validateCarrierForm = (): boolean => {
+    if (!carrierFormData.name?.trim()) {
+      toast({ title: "Validation Error", description: "Carrier name is required.", variant: "destructive" });
+      carrierNameRef.current?.focus();
+      return false;
     }
-
-    if (!selectedSatellite) return;
-
-    const newCarrier: Carrier = {
-      id: selectedCarrier?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: carrierFormData.name!,
-      frequency: carrierFormData.frequency!,
-      frequencyType: carrierFormData.frequencyType || "DVB-S2",
-      polarization: carrierFormData.polarization || "Horizontal",
-      symbolRate: carrierFormData.symbolRate || "",
-      fec: carrierFormData.fec || "",
-      modulation: carrierFormData.modulation || "QPSK",
-      services: carrierFormData.services || []
-    };
-
-    let updatedCarriers: Carrier[];
-    if (selectedCarrier) {
-      updatedCarriers = selectedSatellite.carriers.map(c => 
-        c.id === selectedCarrier.id ? newCarrier : c
-      );
-    } else {
-      updatedCarriers = [...selectedSatellite.carriers, newCarrier];
+    if (!carrierFormData.frequency?.trim()) {
+      toast({ title: "Validation Error", description: "Frequency is required.", variant: "destructive" });
+      return false;
     }
-
-    const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
-    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-    
-    setSelectedSatellite(updatedSatellite);
-    loadSatellites();
-    setIsCarrierDialogOpen(false);
-    setCarrierFormData({});
-
-    toast({
-      title: selectedCarrier ? "Carrier Updated" : "Carrier Added",
-      description: `Carrier "${newCarrier.name}" has been saved.`,
-    });
+    return true;
   };
 
-  const handleDeleteCarrier = async (carrierId: string) => {
-    if (!selectedSatellite) return;
+  const handleSaveCarrier = async () => {
+    if (!validateCarrierForm() || !selectedSatellite) return;
 
-    const updatedCarriers = selectedSatellite.carriers.filter(c => c.id !== carrierId);
-    const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
-    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-    
-    setSelectedSatellite(updatedSatellite);
-    loadSatellites();
+    setIsSaving(true);
+    try {
+      const newCarrier: Carrier = {
+        id: editingCarrier?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: carrierFormData.name!,
+        frequency: carrierFormData.frequency!,
+        polarization: carrierFormData.polarization || "Horizontal",
+        symbolRate: carrierFormData.symbolRate || "",
+        fec: carrierFormData.fec || "Auto",
+        fecMode: carrierFormData.fecMode || "Auto",
+        factoryDefault: carrierFormData.factoryDefault || false,
+        services: editingCarrier?.services || []
+      };
 
-    toast({
-      title: "Carrier Deleted",
-      description: "The carrier has been removed.",
-    });
+      let updatedCarriers: Carrier[];
+      if (editingCarrier) {
+        updatedCarriers = selectedSatellite.carriers.map(c => c.id === editingCarrier.id ? newCarrier : c);
+      } else {
+        updatedCarriers = [...selectedSatellite.carriers, newCarrier];
+      }
+
+      const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+      
+      setSelectedSatellite(updatedSatellite);
+      loadSatellites();
+      setIsCarrierDialogOpen(false);
+      setCarrierFormData({});
+
+      toast({ title: editingCarrier ? "Carrier Updated" : "Carrier Added", description: `Carrier "${newCarrier.name}" has been saved.` });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Service management
   const handleAddService = (carrier: Carrier) => {
     setSelectedCarrier(carrier);
-    setServiceFormData({});
+    setEditingService(null);
+    setServiceFormData({ factoryDefault: false, scramble: false });
+    setIsServiceDialogOpen(true);
+    setTimeout(() => serviceNameRef.current?.focus(), 100);
+  };
+
+  const handleEditService = (carrier: Carrier, service: Service) => {
+    setSelectedCarrier(carrier);
+    setEditingService(service);
+    setServiceFormData(service);
     setIsServiceDialogOpen(true);
   };
 
-  const handleSaveService = async () => {
-    if (!serviceFormData.name) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in service name.",
-        variant: "destructive",
-      });
-      return;
+  const validateServiceForm = (): boolean => {
+    if (!serviceFormData.name?.trim()) {
+      toast({ title: "Validation Error", description: "Service name is required.", variant: "destructive" });
+      serviceNameRef.current?.focus();
+      return false;
     }
-
-    if (!selectedSatellite || !selectedCarrier) return;
-
-    const newService: Service = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: serviceFormData.name!,
-      type: serviceFormData.type || "TV",
-      sid: serviceFormData.sid || "",
-      vpid: serviceFormData.vpid || "",
-      apid: serviceFormData.apid || ""
-    };
-
-    const updatedCarriers = selectedSatellite.carriers.map(c => {
-      if (c.id === selectedCarrier.id) {
-        return { ...c, services: [...c.services, newService] };
-      }
-      return c;
-    });
-
-    const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
-    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-    
-    setSelectedSatellite(updatedSatellite);
-    setSelectedCarrier({ ...selectedCarrier, services: [...selectedCarrier.services, newService] });
-    loadSatellites();
-    setIsServiceDialogOpen(false);
-    setServiceFormData({});
-
-    toast({
-      title: "Service Added",
-      description: `Service "${newService.name}" has been added to carrier.`,
-    });
+    return true;
   };
 
-  const handleDeleteService = async (carrierId: string, serviceId: string) => {
-    if (!selectedSatellite) return;
+  const handleSaveService = async () => {
+    if (!validateServiceForm() || !selectedSatellite || !selectedCarrier) return;
 
-    const updatedCarriers = selectedSatellite.carriers.map(c => {
-      if (c.id === carrierId) {
-        return { ...c, services: c.services.filter(s => s.id !== serviceId) };
-      }
-      return c;
-    });
+    setIsSaving(true);
+    try {
+      const newService: Service = {
+        id: editingService?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: serviceFormData.name!,
+        frequency: serviceFormData.frequency || "",
+        videoPid: serviceFormData.videoPid || "",
+        pcrPid: serviceFormData.pcrPid || "",
+        programNumber: serviceFormData.programNumber || "",
+        favGroup: serviceFormData.favGroup || "",
+        factoryDefault: serviceFormData.factoryDefault || false,
+        preference: serviceFormData.preference || "",
+        scramble: serviceFormData.scramble || false
+      };
 
-    const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
-    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-    
-    setSelectedSatellite(updatedSatellite);
-    if (selectedCarrier?.id === carrierId) {
-      setSelectedCarrier({ ...selectedCarrier, services: selectedCarrier.services.filter(s => s.id !== serviceId) });
+      const updatedCarriers = selectedSatellite.carriers.map(c => {
+        if (c.id === selectedCarrier.id) {
+          if (editingService) {
+            return { ...c, services: c.services.map(s => s.id === editingService.id ? newService : s) };
+          }
+          return { ...c, services: [...c.services, newService] };
+        }
+        return c;
+      });
+
+      const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+      
+      setSelectedSatellite(updatedSatellite);
+      const updatedCarrier = updatedCarriers.find(c => c.id === selectedCarrier.id);
+      if (updatedCarrier) setSelectedCarrier(updatedCarrier);
+      loadSatellites();
+      setIsServiceDialogOpen(false);
+      setServiceFormData({});
+
+      toast({ title: editingService ? "Service Updated" : "Service Added", description: `Service "${newService.name}" has been saved.` });
+    } finally {
+      setIsSaving(false);
     }
-    loadSatellites();
-
-    toast({
-      title: "Service Deleted",
-      description: "The service has been removed.",
-    });
   };
 
   // Equipment mapping
-  const handleToggleEquipment = async (type: 'lnbs' | 'switches' | 'motors' | 'unicables', equipmentId: string) => {
-    if (!selectedSatellite) return;
-
-    const mappingKey = type === 'lnbs' ? 'mappedLnbs' : 
-                       type === 'switches' ? 'mappedSwitches' : 
-                       type === 'motors' ? 'mappedMotors' : 'mappedUnicables';
-    
-    const currentMappings = selectedSatellite[mappingKey] || [];
-    const isCurrentlyMapped = currentMappings.includes(equipmentId);
-    
-    const newMappings = isCurrentlyMapped 
-      ? currentMappings.filter((id: string) => id !== equipmentId)
-      : [...currentMappings, equipmentId];
-
-    const updatedSatellite = { ...selectedSatellite, [mappingKey]: newMappings };
-    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-    
-    setSelectedSatellite(updatedSatellite);
-    loadSatellites();
+  const handleOpenEquipmentDialog = () => {
+    if (selectedSatellite) {
+      setFormData({
+        mappedLnb: selectedSatellite.mappedLnb,
+        mappedSwitch: selectedSatellite.mappedSwitch,
+        mappedMotor: selectedSatellite.mappedMotor,
+        mappedUnicable: selectedSatellite.mappedUnicable
+      });
+      setIsEquipmentDialogOpen(true);
+    }
   };
 
-  const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'position', label: 'Position', sortable: true },
-    { key: 'direction', label: 'Direction', sortable: true },
-    { 
-      key: 'carriers', 
-      label: 'Carriers',
-      render: (carriers: Carrier[]) => <Badge variant="secondary">{carriers?.length || 0}</Badge>
-    },
-    { key: 'age', label: 'Status' }
-  ];
+  const handleSaveEquipment = async () => {
+    if (!selectedSatellite) return;
+
+    setIsSaving(true);
+    try {
+      const updatedSatellite = {
+        ...selectedSatellite,
+        mappedLnb: formData.mappedLnb || "",
+        mappedSwitch: formData.mappedSwitch || "",
+        mappedMotor: formData.mappedMotor || "",
+        mappedUnicable: formData.mappedUnicable || ""
+      };
+      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+      setSelectedSatellite(updatedSatellite);
+      loadSatellites();
+      setIsEquipmentDialogOpen(false);
+      toast({ title: "Equipment Updated", description: "Equipment mappings have been saved." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const getEquipmentName = (type: string, id: string) => {
+    const lists: Record<string, any[]> = { lnb: allLnbs, switch: allSwitches, motor: allMotors, unicable: allUnicables };
+    const item = lists[type]?.find(i => i.id === id);
+    return item?.name || "-";
+  };
+
+  const getTotalServices = () => {
+    if (!selectedSatellite) return 0;
+    return selectedSatellite.carriers.reduce((sum, c) => sum + (c.services?.length || 0), 0);
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -384,8 +444,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-              <Satellite className="h-5 w-5 text-white" />
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+              <Satellite className="h-5 w-5 text-primary-foreground" />
             </div>
             Satellite Management
           </h2>
@@ -395,10 +455,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button 
-              onClick={handleAdd}
-              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-            >
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary-hover">
               <Plus className="mr-2 h-4 w-4" />
               Add Satellite
             </Button>
@@ -406,497 +463,336 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
           <DialogContent className="max-w-md">
             <DialogHeader className="pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
-                <Satellite className="h-5 w-5 text-blue-600" />
+                <Satellite className="h-5 w-5 text-primary" />
                 {editingSatellite ? "Edit Satellite" : "Add New Satellite"}
               </DialogTitle>
-              <DialogDescription>
-                Enter satellite basic information
-              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Satellite Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name || ""}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., ASTRA 2E/2F/2G"
-                />
+                <Label>Satellite Name *</Label>
+                <Input ref={nameRef} value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., ASTRA 2E/2F/2G" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="position">Position *</Label>
-                <Input
-                  id="position"
-                  value={formData.position || ""}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g., 28.2°E"
-                />
+                <Label>Position *</Label>
+                <Input value={formData.position || ""} onChange={(e) => setFormData({ ...formData, position: e.target.value })} placeholder="e.g., 28.2°E" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="direction">Direction</Label>
-                <Select
-                  value={formData.direction || ""}
-                  onValueChange={(value) => setFormData({ ...formData, direction: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select direction" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {directions.map((dir) => (
-                      <SelectItem key={dir} value={dir}>{dir}</SelectItem>
-                    ))}
-                  </SelectContent>
+                <Label>Direction</Label>
+                <Select value={formData.direction || ""} onValueChange={(value) => setFormData({ ...formData, direction: value })}>
+                  <SelectTrigger><SelectValue placeholder="Select direction" /></SelectTrigger>
+                  <SelectContent>{directions.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="age">Status/Age</Label>
-                <Input
-                  id="age"
-                  value={formData.age || ""}
-                  onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                  placeholder="e.g., Active since 2010"
-                />
+                <Label>Status/Age</Label>
+                <Input value={formData.age || ""} onChange={(e) => setFormData({ ...formData, age: e.target.value })} placeholder="e.g., Active since 2010" />
               </div>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} className="bg-gradient-to-r from-blue-500 to-blue-600">
-                {editingSatellite ? "Update" : "Add"} Satellite
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary-hover">
+                {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <>{editingSatellite ? "Update" : "Add"} Satellite</>}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Satellite List */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-lg">Satellites</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[600px]">
-              {satellites.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No satellites found</p>
-              ) : (
-                satellites.map((satellite) => (
-                  <div
-                    key={satellite.id}
-                    onClick={() => handleSelectSatellite(satellite)}
-                    className={`p-4 border-b cursor-pointer transition-colors ${
-                      selectedSatellite?.id === satellite.id 
-                        ? 'bg-blue-50 dark:bg-blue-950 border-l-4 border-l-blue-500' 
-                        : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{satellite.name}</h4>
-                        <p className="text-sm text-muted-foreground">{satellite.position} {satellite.direction}</p>
-                        <div className="flex gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">{satellite.carriers?.length || 0} carriers</Badge>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <span className="ml-3 text-lg text-muted-foreground">Loading satellites...</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Satellite List */}
+          <Card className="lg:col-span-1">
+            <CardHeader className="py-3">
+              <CardTitle className="text-lg flex items-center justify-between">
+                Satellites
+                <Badge variant="secondary">{satellites.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[calc(100vh-280px)]">
+                {satellites.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No satellites found</p>
+                ) : (
+                  satellites.map((satellite) => (
+                    <div
+                      key={satellite.id}
+                      onClick={() => handleSelectSatellite(satellite)}
+                      className={`p-4 border-b cursor-pointer transition-colors ${selectedSatellite?.id === satellite.id ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-muted/50'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-medium truncate">{satellite.name}</h4>
+                          <p className="text-sm text-muted-foreground">{satellite.position} {satellite.direction}</p>
+                          <div className="flex gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">{satellite.carriers?.length || 0} carriers</Badge>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEdit(satellite); }}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(satellite.id); }}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex gap-1 ml-2">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEdit(satellite); }}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setDeleteTarget({ type: 'satellite', id: satellite.id }); }}>
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
-        {/* Configuration Panel */}
-        <Card className="lg:col-span-2">
-          <CardContent className="p-6">
-            {!selectedSatellite ? (
-              <div className="text-center py-20 text-muted-foreground">
-                <Satellite className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                <p>Select a satellite to configure carriers, services, and equipment</p>
-              </div>
-            ) : (
-              <Tabs defaultValue="carriers" className="w-full">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="carriers">Carriers & Services</TabsTrigger>
-                  <TabsTrigger value="equipment">Equipment Mapping</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="carriers" className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Carriers ({selectedSatellite.carriers?.length || 0})</h3>
-                    <Button size="sm" onClick={handleAddCarrier}>
-                      <Plus className="h-4 w-4 mr-1" /> Add Carrier
-                    </Button>
+          {/* Configuration Panel */}
+          <Card className="lg:col-span-3">
+            <CardContent className="p-6">
+              {!selectedSatellite ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <Satellite className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                  <p>Select a satellite to configure carriers, services, and equipment</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-semibold">{selectedSatellite.name}</h3>
+                      <p className="text-sm text-muted-foreground">{selectedSatellite.position} {selectedSatellite.direction}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">{selectedSatellite.carriers?.length || 0} Carriers</Badge>
+                      <Badge variant="secondary">{getTotalServices()} Services</Badge>
+                      <Button variant="outline" size="sm" onClick={handleOpenEquipmentDialog}>
+                        <Settings className="h-4 w-4 mr-1" />
+                        Equipment
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Carriers List */}
-                    <Card className="border-2">
-                      <CardHeader className="py-3 bg-muted/50">
-                        <CardTitle className="text-sm">Carriers</CardTitle>
-                      </CardHeader>
-                      <ScrollArea className="h-[400px]">
-                        <CardContent className="p-2">
-                          {(selectedSatellite.carriers || []).length === 0 ? (
-                            <p className="text-center text-muted-foreground py-8 text-sm">No carriers configured</p>
-                          ) : (
-                            selectedSatellite.carriers.map((carrier) => (
-                              <div
-                                key={carrier.id}
-                                onClick={() => setSelectedCarrier(carrier)}
-                                className={`p-3 rounded-lg mb-2 cursor-pointer transition-colors ${
-                                  selectedCarrier?.id === carrier.id 
-                                    ? 'bg-blue-100 dark:bg-blue-900 border border-blue-300' 
-                                    : 'bg-muted/30 hover:bg-muted/50'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h5 className="font-medium text-sm">{carrier.name}</h5>
-                                    <p className="text-xs text-muted-foreground">
-                                      {carrier.frequency} MHz • {carrier.frequencyType} • {carrier.polarization}
-                                    </p>
-                                    <Badge variant="secondary" className="text-xs mt-1">
-                                      {carrier.services?.length || 0} services
-                                    </Badge>
-                                  </div>
-                                  <div className="flex gap-1">
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEditCarrier(carrier); }}>
-                                      <Edit className="h-3 w-3" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleDeleteCarrier(carrier.id); }}>
-                                      <Trash2 className="h-3 w-3 text-destructive" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
 
-                    {/* Services List */}
-                    <Card className="border-2">
-                      <CardHeader className="py-3 bg-muted/50">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-sm">
-                            Services {selectedCarrier ? `- ${selectedCarrier.name}` : ''}
-                          </CardTitle>
-                          {selectedCarrier && (
-                            <Button size="sm" variant="outline" className="h-7" onClick={() => handleAddService(selectedCarrier)}>
-                              <Plus className="h-3 w-3 mr-1" /> Add
-                            </Button>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <ScrollArea className="h-[400px]">
-                        <CardContent className="p-2">
-                          {!selectedCarrier ? (
-                            <p className="text-center text-muted-foreground py-8 text-sm">Select a carrier to view services</p>
-                          ) : (selectedCarrier.services || []).length === 0 ? (
-                            <p className="text-center text-muted-foreground py-8 text-sm">No services in this carrier</p>
-                          ) : (
-                            selectedCarrier.services.map((service) => (
-                              <div key={service.id} className="p-3 rounded-lg mb-2 bg-muted/30">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h5 className="font-medium text-sm">{service.name}</h5>
-                                    <div className="flex gap-2 mt-1">
-                                      <Badge variant="outline" className="text-xs">{service.type}</Badge>
-                                      {service.sid && <span className="text-xs text-muted-foreground">SID: {service.sid}</span>}
+                  {/* Equipment Summary */}
+                  <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Radio className="h-4 w-4 text-primary" />
+                      <span className="text-sm">LNB: {getEquipmentName('lnb', selectedSatellite.mappedLnb)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-primary" />
+                      <span className="text-sm">Switch: {getEquipmentName('switch', selectedSatellite.mappedSwitch)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RotateCcw className="h-4 w-4 text-primary" />
+                      <span className="text-sm">Motor: {getEquipmentName('motor', selectedSatellite.mappedMotor)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-primary" />
+                      <span className="text-sm">Unicable: {getEquipmentName('unicable', selectedSatellite.mappedUnicable)}</span>
+                    </div>
+                  </div>
+
+                  <Tabs defaultValue="carriers" className="w-full">
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="carriers">Carriers</TabsTrigger>
+                      <TabsTrigger value="services">Services</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="carriers">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium">Carrier List</h4>
+                        <Button size="sm" onClick={handleAddCarrier}><Plus className="h-4 w-4 mr-1" /> Add Carrier</Button>
+                      </div>
+                      <div className="rounded-lg border overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow>
+                              <TableHead className="w-12">#</TableHead>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Frequency</TableHead>
+                              <TableHead>Polarization</TableHead>
+                              <TableHead>Symbol Rate</TableHead>
+                              <TableHead>FEC</TableHead>
+                              <TableHead>Services</TableHead>
+                              <TableHead className="w-20">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {selectedSatellite.carriers.length === 0 ? (
+                              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No carriers. Click "Add Carrier" to create one.</TableCell></TableRow>
+                            ) : (
+                              selectedSatellite.carriers.map((carrier, index) => (
+                                <TableRow key={carrier.id} className="hover:bg-muted/30">
+                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell className="font-medium">{carrier.name}</TableCell>
+                                  <TableCell>{carrier.frequency}</TableCell>
+                                  <TableCell>{carrier.polarization}</TableCell>
+                                  <TableCell>{carrier.symbolRate || '-'}</TableCell>
+                                  <TableCell>{carrier.fec || '-'}</TableCell>
+                                  <TableCell><Badge variant="secondary">{carrier.services?.length || 0}</Badge></TableCell>
+                                  <TableCell>
+                                    <div className="flex gap-1">
+                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(carrier)}><Edit className="h-3 w-3" /></Button>
+                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                                     </div>
-                                  </div>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-7 w-7 p-0"
-                                    onClick={() => handleDeleteService(selectedCarrier.id, service.id)}
-                                  >
-                                    <Trash2 className="h-3 w-3 text-destructive" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="equipment" className="space-y-4">
-                  <p className="text-sm text-muted-foreground">Select equipment to map to this satellite</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* LNBs */}
-                    <Card>
-                      <CardHeader className="py-3 bg-gradient-to-r from-green-500/10 to-green-600/5">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Radio className="h-4 w-4 text-green-600" /> LNBs
-                        </CardTitle>
-                      </CardHeader>
-                      <ScrollArea className="h-[150px]">
-                        <CardContent className="p-2">
-                          {allLnbs.map((lnb) => (
-                            <div
-                              key={lnb.id}
-                              onClick={() => handleToggleEquipment('lnbs', lnb.id)}
-                              className={`p-2 rounded cursor-pointer text-sm transition-colors ${
-                                selectedSatellite.mappedLnbs?.includes(lnb.id)
-                                  ? 'bg-green-100 dark:bg-green-900'
-                                  : 'hover:bg-muted/50'
-                              }`}
-                            >
-                              {lnb.name}
-                            </div>
-                          ))}
-                          {allLnbs.length === 0 && <p className="text-center text-muted-foreground py-4 text-xs">No LNBs available</p>}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </TabsContent>
 
-                    {/* Switches */}
-                    <Card>
-                      <CardHeader className="py-3 bg-gradient-to-r from-orange-500/10 to-orange-600/5">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-orange-600" /> Switches
-                        </CardTitle>
-                      </CardHeader>
-                      <ScrollArea className="h-[150px]">
-                        <CardContent className="p-2">
-                          {allSwitches.map((sw) => (
-                            <div
-                              key={sw.id}
-                              onClick={() => handleToggleEquipment('switches', sw.id)}
-                              className={`p-2 rounded cursor-pointer text-sm transition-colors ${
-                                selectedSatellite.mappedSwitches?.includes(sw.id)
-                                  ? 'bg-orange-100 dark:bg-orange-900'
-                                  : 'hover:bg-muted/50'
-                              }`}
-                            >
-                              {sw.name}
-                            </div>
-                          ))}
-                          {allSwitches.length === 0 && <p className="text-center text-muted-foreground py-4 text-xs">No switches available</p>}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
-
-                    {/* Motors */}
-                    <Card>
-                      <CardHeader className="py-3 bg-gradient-to-r from-purple-500/10 to-purple-600/5">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <RotateCcw className="h-4 w-4 text-purple-600" /> Motors
-                        </CardTitle>
-                      </CardHeader>
-                      <ScrollArea className="h-[150px]">
-                        <CardContent className="p-2">
-                          {allMotors.map((motor) => (
-                            <div
-                              key={motor.id}
-                              onClick={() => handleToggleEquipment('motors', motor.id)}
-                              className={`p-2 rounded cursor-pointer text-sm transition-colors ${
-                                selectedSatellite.mappedMotors?.includes(motor.id)
-                                  ? 'bg-purple-100 dark:bg-purple-900'
-                                  : 'hover:bg-muted/50'
-                              }`}
-                            >
-                              {motor.name}
-                            </div>
-                          ))}
-                          {allMotors.length === 0 && <p className="text-center text-muted-foreground py-4 text-xs">No motors available</p>}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
-
-                    {/* Unicables */}
-                    <Card>
-                      <CardHeader className="py-3 bg-gradient-to-r from-pink-500/10 to-pink-600/5">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-pink-600" /> Unicables
-                        </CardTitle>
-                      </CardHeader>
-                      <ScrollArea className="h-[150px]">
-                        <CardContent className="p-2">
-                          {allUnicables.map((unicable) => (
-                            <div
-                              key={unicable.id}
-                              onClick={() => handleToggleEquipment('unicables', unicable.id)}
-                              className={`p-2 rounded cursor-pointer text-sm transition-colors ${
-                                selectedSatellite.mappedUnicables?.includes(unicable.id)
-                                  ? 'bg-pink-100 dark:bg-pink-900'
-                                  : 'hover:bg-muted/50'
-                              }`}
-                            >
-                              {unicable.name}
-                            </div>
-                          ))}
-                          {allUnicables.length === 0 && <p className="text-center text-muted-foreground py-4 text-xs">No unicables available</p>}
-                        </CardContent>
-                      </ScrollArea>
-                    </Card>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    <TabsContent value="services">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <h4 className="font-medium">Services</h4>
+                          <Select value={selectedCarrier?.id || ""} onValueChange={(id) => setSelectedCarrier(selectedSatellite.carriers.find(c => c.id === id) || null)}>
+                            <SelectTrigger className="w-48"><SelectValue placeholder="Select carrier" /></SelectTrigger>
+                            <SelectContent>{selectedSatellite.carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        {selectedCarrier && <Button size="sm" onClick={() => handleAddService(selectedCarrier)}><Plus className="h-4 w-4 mr-1" /> Add Service</Button>}
+                      </div>
+                      {!selectedCarrier ? (
+                        <p className="text-center text-muted-foreground py-8">Select a carrier to view its services</p>
+                      ) : (
+                        <div className="rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader className="bg-muted/50">
+                              <TableRow>
+                                <TableHead className="w-12">#</TableHead>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Frequency</TableHead>
+                                <TableHead>Video PID</TableHead>
+                                <TableHead>PCR PID</TableHead>
+                                <TableHead>Program #</TableHead>
+                                <TableHead>Scramble</TableHead>
+                                <TableHead className="w-20">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(selectedCarrier.services || []).length === 0 ? (
+                                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No services in this carrier.</TableCell></TableRow>
+                              ) : (
+                                selectedCarrier.services.map((service, index) => (
+                                  <TableRow key={service.id} className="hover:bg-muted/30">
+                                    <TableCell>{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{service.name}</TableCell>
+                                    <TableCell>{service.frequency || '-'}</TableCell>
+                                    <TableCell>{service.videoPid || '-'}</TableCell>
+                                    <TableCell>{service.pcrPid || '-'}</TableCell>
+                                    <TableCell>{service.programNumber || '-'}</TableCell>
+                                    <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-1">
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditService(selectedCarrier, service)}><Edit className="h-3 w-3" /></Button>
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'service', id: service.id, carrierId: selectedCarrier.id })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Carrier Dialog */}
       <Dialog open={isCarrierDialogOpen} onOpenChange={setIsCarrierDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader className="pb-4 border-b">
-            <DialogTitle>{selectedCarrier ? "Edit Carrier" : "Add New Carrier"}</DialogTitle>
+            <DialogTitle>{editingCarrier ? "Edit Carrier" : "Add New Carrier"}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Carrier Name *</Label>
-              <Input
-                value={carrierFormData.name || ""}
-                onChange={(e) => setCarrierFormData({ ...carrierFormData, name: e.target.value })}
-                placeholder="e.g., BBC Multiplex 1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Frequency (MHz) *</Label>
-              <Input
-                value={carrierFormData.frequency || ""}
-                onChange={(e) => setCarrierFormData({ ...carrierFormData, frequency: e.target.value })}
-                placeholder="e.g., 10773"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Frequency Type</Label>
-              <Select
-                value={carrierFormData.frequencyType || "DVB-S2"}
-                onValueChange={(value) => setCarrierFormData({ ...carrierFormData, frequencyType: value })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {frequencyTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Polarization</Label>
-              <Select
-                value={carrierFormData.polarization || "Horizontal"}
-                onValueChange={(value) => setCarrierFormData({ ...carrierFormData, polarization: value })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {polarizations.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Symbol Rate</Label>
-              <Input
-                value={carrierFormData.symbolRate || ""}
-                onChange={(e) => setCarrierFormData({ ...carrierFormData, symbolRate: e.target.value })}
-                placeholder="e.g., 22000"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>FEC</Label>
-              <Input
-                value={carrierFormData.fec || ""}
-                onChange={(e) => setCarrierFormData({ ...carrierFormData, fec: e.target.value })}
-                placeholder="e.g., 2/3"
-              />
-            </div>
-            <div className="space-y-2 col-span-2">
-              <Label>Modulation</Label>
-              <Select
-                value={carrierFormData.modulation || "QPSK"}
-                onValueChange={(value) => setCarrierFormData({ ...carrierFormData, modulation: value })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {modulations.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-2"><Label>Carrier Name *</Label><Input ref={carrierNameRef} value={carrierFormData.name || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, name: e.target.value })} placeholder="e.g., BBC Multiplex 1" /></div>
+            <div className="space-y-2"><Label>Frequency (MHz) *</Label><Input value={carrierFormData.frequency || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, frequency: e.target.value })} placeholder="e.g., 10773" /></div>
+            <div className="space-y-2"><Label>Polarization</Label><Select value={carrierFormData.polarization || "Horizontal"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, polarization: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Symbol Rate</Label><Input value={carrierFormData.symbolRate || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, symbolRate: e.target.value })} placeholder="e.g., 22000" /></div>
+            <div className="space-y-2"><Label>FEC</Label><Select value={carrierFormData.fec || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fec: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fecOptions.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>FEC Mode</Label><Select value={carrierFormData.fecMode || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fecMode: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fecModes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+            <div className="col-span-2 flex items-center gap-2"><Checkbox checked={carrierFormData.factoryDefault || false} onCheckedChange={(c) => setCarrierFormData({ ...carrierFormData, factoryDefault: !!c })} /><Label>Factory Default</Label></div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsCarrierDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveCarrier}>Save Carrier</Button>
+            <Button onClick={handleSaveCarrier} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save Carrier"}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Service Dialog */}
       <Dialog open={isServiceDialogOpen} onOpenChange={setIsServiceDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader className="pb-4 border-b">
-            <DialogTitle>Add New Service</DialogTitle>
-            <DialogDescription>Add a service to carrier: {selectedCarrier?.name}</DialogDescription>
+            <DialogTitle>{editingService ? "Edit Service" : "Add New Service"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Service Name *</Label>
-              <Input
-                value={serviceFormData.name || ""}
-                onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })}
-                placeholder="e.g., BBC One HD"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select
-                value={serviceFormData.type || "TV"}
-                onValueChange={(value) => setServiceFormData({ ...serviceFormData, type: value })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {serviceTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-2">
-                <Label>SID</Label>
-                <Input
-                  value={serviceFormData.sid || ""}
-                  onChange={(e) => setServiceFormData({ ...serviceFormData, sid: e.target.value })}
-                  placeholder="6301"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>VPID</Label>
-                <Input
-                  value={serviceFormData.vpid || ""}
-                  onChange={(e) => setServiceFormData({ ...serviceFormData, vpid: e.target.value })}
-                  placeholder="5100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>APID</Label>
-                <Input
-                  value={serviceFormData.apid || ""}
-                  onChange={(e) => setServiceFormData({ ...serviceFormData, apid: e.target.value })}
-                  placeholder="5101"
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2"><Label>Service Name *</Label><Input ref={serviceNameRef} value={serviceFormData.name || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} placeholder="e.g., BBC One HD" /></div>
+            <div className="space-y-2"><Label>Frequency</Label><Input value={serviceFormData.frequency || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, frequency: e.target.value })} placeholder="e.g., 10773" /></div>
+            <div className="space-y-2"><Label>Video PID</Label><Input value={serviceFormData.videoPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, videoPid: e.target.value })} placeholder="e.g., 5500" /></div>
+            <div className="space-y-2"><Label>PCR PID</Label><Input value={serviceFormData.pcrPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, pcrPid: e.target.value })} placeholder="e.g., 5500" /></div>
+            <div className="space-y-2"><Label>Program Number</Label><Input value={serviceFormData.programNumber || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, programNumber: e.target.value })} placeholder="e.g., 6940" /></div>
+            <div className="space-y-2"><Label>FAV Group</Label><Input value={serviceFormData.favGroup || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, favGroup: e.target.value })} placeholder="e.g., Entertainment" /></div>
+            <div className="space-y-2"><Label>Preference</Label><Input value={serviceFormData.preference || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, preference: e.target.value })} placeholder="e.g., 1" /></div>
+            <div className="space-y-2 flex flex-col gap-3">
+              <div className="flex items-center gap-2"><Checkbox checked={serviceFormData.factoryDefault || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, factoryDefault: !!c })} /><Label>Factory Default</Label></div>
+              <div className="flex items-center gap-2"><Checkbox checked={serviceFormData.scramble || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, scramble: !!c })} /><Label>Scramble</Label></div>
             </div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsServiceDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveService}>Add Service</Button>
+            <Button onClick={handleSaveService} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save Service"}</Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Equipment Mapping Dialog */}
+      <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2"><Settings className="h-5 w-5" /> Equipment Mapping</DialogTitle>
+            <DialogDescription>Select equipment for this satellite (optional)</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>LNB</Label><Select value={formData.mappedLnb || "none"} onValueChange={(v) => setFormData({ ...formData, mappedLnb: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Switch</Label><Select value={formData.mappedSwitch || "none"} onValueChange={(v) => setFormData({ ...formData, mappedSwitch: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Motor</Label><Select value={formData.mappedMotor || "none"} onValueChange={(v) => setFormData({ ...formData, mappedMotor: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Unicable</Label><Select value={formData.mappedUnicable || "none"} onValueChange={(v) => setFormData({ ...formData, mappedUnicable: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Unicable" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allUnicables.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          <div className="flex justify-end space-x-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsEquipmentDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveEquipment} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.type === 'satellite' && "Are you sure you want to delete this satellite? All carriers and services will also be deleted."}
+              {deleteTarget?.type === 'carrier' && "Are you sure you want to delete this carrier? All services in this carrier will also be deleted."}
+              {deleteTarget?.type === 'service' && "Are you sure you want to delete this service?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

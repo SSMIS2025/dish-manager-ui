@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,9 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
 import { 
-  Plus, FolderOpen, Edit, Trash2, Download, Radio, Zap, RotateCcw, Activity, Satellite, Check, X 
+  Plus, FolderOpen, Edit, Trash2, Download, Radio, Zap, RotateCcw, Activity, Satellite, Check, Loader2, FileCode 
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
@@ -37,8 +36,12 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBinDialogOpen, setIsBinDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [formData, setFormData] = useState<{ name: string; description: string }>({ name: '', description: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingBin, setIsGeneratingBin] = useState(false);
   
   // Equipment lists
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
@@ -53,6 +56,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   // Import source
   const [importSourceProject, setImportSourceProject] = useState<string>('');
 
+  const nameRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     loadProjects();
     loadEquipment();
@@ -65,10 +70,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   }, [selectedProject]);
 
   const loadProjects = async () => {
-    const allProjects = await apiService.getProjects();
-    setProjects(allProjects);
-    if (allProjects.length > 0 && !selectedProject) {
-      setSelectedProject(allProjects[0]);
+    setIsLoading(true);
+    try {
+      const allProjects = await apiService.getProjects();
+      setProjects(allProjects);
+      if (allProjects.length > 0 && !selectedProject) {
+        setSelectedProject(allProjects[0]);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -96,6 +106,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setEditingProject(null);
     setFormData({ name: '', description: '' });
     setIsDialogOpen(true);
+    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEditProject = (project: any) => {
@@ -104,69 +115,90 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setIsDialogOpen(true);
   };
 
-  const handleSaveProject = async () => {
-    if (!formData.name) {
+  const validateForm = (): boolean => {
+    if (!formData.name?.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please enter a project name.",
+        description: "Project name is required.",
         variant: "destructive",
       });
-      return;
+      nameRef.current?.focus();
+      return false;
     }
+    return true;
+  };
 
-    if (editingProject) {
-      await apiService.updateProject(editingProject.id, formData);
-      await apiService.logActivity(username, "Project Updated", `Updated project: ${formData.name}`, editingProject.id);
-      toast({ title: "Project Updated", description: "The project has been updated." });
-    } else {
-      await apiService.saveProject({ ...formData, createdBy: username });
-      await apiService.logActivity(username, "Project Created", `Created project: ${formData.name}`, 'global');
-      toast({ title: "Project Created", description: "The new project has been created." });
+  const handleSaveProject = async () => {
+    if (!validateForm()) return;
+
+    setIsSaving(true);
+    try {
+      if (editingProject) {
+        await apiService.updateProject(editingProject.id, formData);
+        await apiService.logActivity(username, "Project Updated", `Updated project: ${formData.name}`, editingProject.id);
+        toast({ title: "Project Updated", description: "The project has been updated." });
+      } else {
+        await apiService.saveProject({ ...formData, createdBy: username });
+        await apiService.logActivity(username, "Project Created", `Created project: ${formData.name}`, 'global');
+        toast({ title: "Project Created", description: "The new project has been created." });
+      }
+
+      loadProjects();
+      setIsDialogOpen(false);
+    } finally {
+      setIsSaving(false);
     }
-
-    loadProjects();
-    setIsDialogOpen(false);
   };
 
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
     
-    await apiService.deleteProject(selectedProject.id);
-    await apiService.logActivity(username, "Project Deleted", `Deleted project: ${selectedProject.name}`, 'global');
-    
-    setSelectedProject(null);
-    loadProjects();
-    setIsDeleteDialogOpen(false);
-    toast({ title: "Project Deleted", description: "The project has been deleted." });
+    setIsLoading(true);
+    try {
+      await apiService.deleteProject(selectedProject.id);
+      await apiService.logActivity(username, "Project Deleted", `Deleted project: ${selectedProject.name}`, 'global');
+      
+      setSelectedProject(null);
+      loadProjects();
+      setIsDeleteDialogOpen(false);
+      toast({ title: "Project Deleted", description: "The project has been deleted." });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleToggleMapping = async (equipmentType: string, equipmentId: string) => {
     if (!selectedProject) return;
 
-    const existingMapping = projectMappings.find(
-      m => m.equipmentType === equipmentType && m.equipmentId === equipmentId
-    );
+    setIsSaving(true);
+    try {
+      const existingMapping = projectMappings.find(
+        m => m.equipmentType === equipmentType && m.equipmentId === equipmentId
+      );
 
-    if (existingMapping) {
-      await apiService.deleteProjectMapping(selectedProject.id, equipmentType, equipmentId);
-      toast({ title: "Mapping Removed", description: "Equipment removed from project." });
-    } else {
-      await apiService.saveProjectMapping({
-        projectId: selectedProject.id,
-        equipmentType,
-        equipmentId
-      });
-      toast({ title: "Mapping Added", description: "Equipment added to project." });
+      if (existingMapping) {
+        await apiService.deleteProjectMapping(selectedProject.id, equipmentType, equipmentId);
+        toast({ title: "Mapping Removed", description: "Equipment removed from project." });
+      } else {
+        await apiService.saveProjectMapping({
+          projectId: selectedProject.id,
+          equipmentType,
+          equipmentId
+        });
+        toast({ title: "Mapping Added", description: "Equipment added to project." });
+      }
+
+      await apiService.logActivity(
+        username, 
+        existingMapping ? "Mapping Removed" : "Mapping Added", 
+        `${existingMapping ? 'Removed' : 'Added'} ${equipmentType} mapping`, 
+        selectedProject.id
+      );
+
+      loadProjectMappings(selectedProject.id);
+    } finally {
+      setIsSaving(false);
     }
-
-    await apiService.logActivity(
-      username, 
-      existingMapping ? "Mapping Removed" : "Mapping Added", 
-      `${existingMapping ? 'Removed' : 'Added'} ${equipmentType} mapping`, 
-      selectedProject.id
-    );
-
-    loadProjectMappings(selectedProject.id);
   };
 
   const handleImportMappings = async () => {
@@ -179,12 +211,103 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return;
     }
 
-    await apiService.importProjectMappings(importSourceProject, selectedProject.id);
-    await apiService.logActivity(username, "Mappings Imported", `Imported mappings from another project`, selectedProject.id);
+    setIsSaving(true);
+    try {
+      await apiService.importProjectMappings(importSourceProject, selectedProject.id);
+      await apiService.logActivity(username, "Mappings Imported", `Imported mappings from another project`, selectedProject.id);
+      
+      loadProjectMappings(selectedProject.id);
+      setIsImportDialogOpen(false);
+      toast({ title: "Import Complete", description: "Mappings have been imported." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const generateProjectXML = (): string => {
+    if (!selectedProject) return "";
     
-    loadProjectMappings(selectedProject.id);
-    setIsImportDialogOpen(false);
-    toast({ title: "Import Complete", description: "Mappings have been imported." });
+    const mappedLnbs = allLnbs.filter(l => isMapped('lnbs', l.id));
+    const mappedSwitches = allSwitches.filter(s => isMapped('switches', s.id));
+    const mappedMotors = allMotors.filter(m => isMapped('motors', m.id));
+    const mappedUnicables = allUnicables.filter(u => isMapped('unicables', u.id));
+    const mappedSats = allSatellites.filter(s => isMapped('satellites', s.id));
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<Project name="${selectedProject.name}">\n`;
+    xml += `  <Description>${selectedProject.description || ''}</Description>\n`;
+    xml += `  <CreatedBy>${selectedProject.createdBy}</CreatedBy>\n`;
+    xml += `  <LNBs>\n`;
+    mappedLnbs.forEach(l => {
+      xml += `    <LNB id="${l.id}" name="${l.name}" type="${l.lnbType || l.type}" lowFreq="${l.lowFrequency}" highFreq="${l.highFrequency}" />\n`;
+    });
+    xml += `  </LNBs>\n`;
+    xml += `  <Switches>\n`;
+    mappedSwitches.forEach(s => {
+      xml += `    <Switch id="${s.id}" name="${s.name}" type="${s.switchType || s.type}" config="${s.switchConfiguration}" />\n`;
+    });
+    xml += `  </Switches>\n`;
+    xml += `  <Motors>\n`;
+    mappedMotors.forEach(m => {
+      xml += `    <Motor id="${m.id}" name="${m.name}" type="${m.type}" position="${m.position}" longitude="${m.longitude}" latitude="${m.latitude}" />\n`;
+    });
+    xml += `  </Motors>\n`;
+    xml += `  <Unicables>\n`;
+    mappedUnicables.forEach(u => {
+      xml += `    <Unicable id="${u.id}" name="${u.name}" type="${u.type}" port="${u.port}" />\n`;
+    });
+    xml += `  </Unicables>\n`;
+    xml += `  <Satellites>\n`;
+    mappedSats.forEach(sat => {
+      xml += `    <Satellite id="${sat.id}" name="${sat.name}" position="${sat.position}" direction="${sat.direction}">\n`;
+      (sat.carriers || []).forEach((c: any) => {
+        xml += `      <Carrier id="${c.id}" name="${c.name}" frequency="${c.frequency}" polarization="${c.polarization}" symbolRate="${c.symbolRate}" fec="${c.fec}">\n`;
+        (c.services || []).forEach((s: any) => {
+          xml += `        <Service id="${s.id}" name="${s.name}" videoPid="${s.videoPid}" pcrPid="${s.pcrPid}" programNumber="${s.programNumber}" />\n`;
+        });
+        xml += `      </Carrier>\n`;
+      });
+      xml += `    </Satellite>\n`;
+    });
+    xml += `  </Satellites>\n`;
+    xml += `</Project>`;
+    
+    return xml;
+  };
+
+  const handleGenerateBin = async () => {
+    if (!selectedProject) return;
+    
+    setIsGeneratingBin(true);
+    try {
+      const xmlData = generateProjectXML();
+      const result = await apiService.generateBin(selectedProject.id, xmlData);
+      
+      if (result.success && result.binPath) {
+        // In a real implementation, this would trigger a download
+        toast({ title: "Bin Generated", description: `Bin file created at: ${result.binPath}` });
+        
+        // Simulate download
+        const blob = new Blob([xmlData], { type: 'application/xml' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedProject.name.replace(/\s+/g, '_')}_config.xml`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        toast({ 
+          title: "Bin Generation", 
+          description: result.error || "Bin generation requires MySQL backend mode.",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsGeneratingBin(false);
+      setIsBinDialogOpen(false);
+    }
   };
 
   const isMapped = (equipmentType: string, equipmentId: string) => {
@@ -198,11 +321,11 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   };
 
   const equipmentTypes = [
-    { key: 'lnbs', label: 'LNBs', icon: Radio, items: allLnbs, color: 'green' },
-    { key: 'switches', label: 'Switches', icon: Zap, items: allSwitches, color: 'orange' },
-    { key: 'motors', label: 'Motors', icon: RotateCcw, items: allMotors, color: 'purple' },
-    { key: 'unicables', label: 'Unicables', icon: Activity, items: allUnicables, color: 'pink' },
-    { key: 'satellites', label: 'Satellites', icon: Satellite, items: allSatellites, color: 'blue' },
+    { key: 'lnbs', label: 'LNBs', icon: Radio, items: allLnbs },
+    { key: 'switches', label: 'Switches', icon: Zap, items: allSwitches },
+    { key: 'motors', label: 'Motors', icon: RotateCcw, items: allMotors },
+    { key: 'unicables', label: 'Unicables', icon: Activity, items: allUnicables },
+    { key: 'satellites', label: 'Satellites', icon: Satellite, items: allSatellites },
   ];
 
   return (
@@ -211,8 +334,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center">
-              <FolderOpen className="h-5 w-5 text-white" />
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+              <FolderOpen className="h-5 w-5 text-primary-foreground" />
             </div>
             Project Mapping
           </h2>
@@ -222,20 +345,31 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </div>
         <div className="flex gap-2">
           {selectedProject && (
-            <Button 
-              variant="outline"
-              onClick={() => setIsImportDialogOpen(true)}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Import from Project
-            </Button>
+            <>
+              <Button 
+                variant="outline"
+                onClick={() => setIsBinDialogOpen(true)}
+                disabled={isGeneratingBin}
+              >
+                {isGeneratingBin ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileCode className="mr-2 h-4 w-4" />
+                )}
+                Generate Bin
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setIsImportDialogOpen(true)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Import from Project
+              </Button>
+            </>
           )}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button 
-                onClick={handleAddProject}
-                className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-              >
+              <Button onClick={handleAddProject} className="bg-primary hover:bg-primary-hover">
                 <Plus className="mr-2 h-4 w-4" />
                 New Project
               </Button>
@@ -243,7 +377,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             <DialogContent className="max-w-md">
               <DialogHeader className="pb-4 border-b">
                 <DialogTitle className="flex items-center gap-2">
-                  <FolderOpen className="h-5 w-5 text-indigo-600" />
+                  <FolderOpen className="h-5 w-5 text-primary" />
                   {editingProject ? "Edit Project" : "Create New Project"}
                 </DialogTitle>
               </DialogHeader>
@@ -251,6 +385,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 <div className="space-y-2">
                   <Label>Project Name *</Label>
                   <Input
+                    ref={nameRef}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g., UK Satellite Configuration"
@@ -268,8 +403,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               </div>
               <div className="flex justify-end space-x-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSaveProject}>
-                  {editingProject ? "Update" : "Create"} Project
+                <Button onClick={handleSaveProject} disabled={isSaving}>
+                  {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <>{editingProject ? "Update" : "Create"} Project</>}
                 </Button>
               </div>
             </DialogContent>
@@ -277,180 +412,223 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Project List */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-lg">Projects ({projects.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[600px]">
-              {projects.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No projects found</p>
-              ) : (
-                projects.map((project) => (
-                  <div
-                    key={project.id}
-                    onClick={() => setSelectedProject(project)}
-                    className={`p-4 border-b cursor-pointer transition-colors ${
-                      selectedProject?.id === project.id 
-                        ? 'bg-indigo-50 dark:bg-indigo-950 border-l-4 border-l-indigo-500' 
-                        : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{project.name}</h4>
-                        <p className="text-sm text-muted-foreground line-clamp-1">{project.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          By {project.createdBy}
-                        </p>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEditProject(project); }}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setSelectedProject(project);
-                            setIsDeleteDialogOpen(true); 
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <span className="ml-3 text-lg text-muted-foreground">Loading projects...</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Project List */}
+          <Card className="lg:col-span-1">
+            <CardHeader className="py-3">
+              <CardTitle className="text-lg flex items-center justify-between">
+                Projects
+                <Badge variant="secondary">{projects.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[calc(100vh-280px)]">
+                {projects.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No projects found</p>
+                ) : (
+                  projects.map((project) => (
+                    <div
+                      key={project.id}
+                      onClick={() => setSelectedProject(project)}
+                      className={`p-4 border-b cursor-pointer transition-colors ${
+                        selectedProject?.id === project.id 
+                          ? 'bg-primary/10 border-l-4 border-l-primary' 
+                          : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-medium truncate">{project.name}</h4>
+                          <p className="text-sm text-muted-foreground line-clamp-1">{project.description}</p>
+                          <p className="text-xs text-muted-foreground mt-1">By {project.createdBy}</p>
+                        </div>
+                        <div className="flex gap-1 ml-2">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEditProject(project); }}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setSelectedProject(project);
+                              setIsDeleteDialogOpen(true); 
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
-        {/* Equipment Mapping */}
-        <Card className="lg:col-span-3">
-          <CardContent className="p-6">
-            {!selectedProject ? (
-              <div className="text-center py-20 text-muted-foreground">
-                <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                <p>Select a project to manage equipment mappings</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-xl font-semibold">{selectedProject.name}</h3>
-                    <p className="text-sm text-muted-foreground">{selectedProject.description}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    {equipmentTypes.map(({ key, label }) => (
-                      <Badge key={key} variant="secondary">
-                        {label}: {getMappingCount(key)}
-                      </Badge>
-                    ))}
-                  </div>
+          {/* Equipment Mapping */}
+          <Card className="lg:col-span-3">
+            <CardContent className="p-6">
+              {!selectedProject ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                  <p>Select a project to manage equipment mappings</p>
                 </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-semibold">{selectedProject.name}</h3>
+                      <p className="text-sm text-muted-foreground">{selectedProject.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {equipmentTypes.map(({ key, label }) => (
+                        <Badge key={key} variant="secondary">
+                          {label}: {getMappingCount(key)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
 
-                <Tabs defaultValue="lnbs">
-                  <TabsList className="mb-4">
-                    {equipmentTypes.map(({ key, label, icon: Icon }) => (
-                      <TabsTrigger key={key} value={key} className="flex items-center gap-1">
-                        <Icon className="h-4 w-4" />
-                        {label} ({getMappingCount(key)})
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
+                  <Tabs defaultValue="lnbs">
+                    <TabsList className="mb-4">
+                      {equipmentTypes.map(({ key, label, icon: Icon }) => (
+                        <TabsTrigger key={key} value={key} className="flex items-center gap-1">
+                          <Icon className="h-4 w-4" />
+                          {label} ({getMappingCount(key)})
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
 
-                  {equipmentTypes.map(({ key, label, items, color }) => (
-                    <TabsContent key={key} value={key}>
-                      <Card>
-                        <CardHeader className={`py-3 bg-gradient-to-r from-${color}-500/10 to-${color}-600/5`}>
-                          <CardTitle className="text-sm">
-                            Select {label} to map to this project
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          {items.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-8">
-                              No {label.toLowerCase()} available in the global bucket
-                            </p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {items.map((item) => {
-                                const mapped = isMapped(key, item.id);
-                                return (
-                                  <div
-                                    key={item.id}
-                                    onClick={() => handleToggleMapping(key, item.id)}
-                                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                      mapped 
-                                        ? `border-${color}-500 bg-${color}-50 dark:bg-${color}-950` 
-                                        : 'border-muted hover:border-muted-foreground/30'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <h5 className="font-medium">{item.name}</h5>
-                                        <p className="text-sm text-muted-foreground">
-                                          {item.type || item.position || ''}
-                                        </p>
-                                      </div>
-                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    {equipmentTypes.map(({ key, label, items }) => (
+                      <TabsContent key={key} value={key}>
+                        <Card>
+                          <CardHeader className="py-3 bg-primary/5">
+                            <CardTitle className="text-sm">
+                              Select {label} to map to this project
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4">
+                            {items.length === 0 ? (
+                              <p className="text-center text-muted-foreground py-8">
+                                No {label.toLowerCase()} available in the global bucket
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {items.map((item) => {
+                                  const mapped = isMapped(key, item.id);
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => handleToggleMapping(key, item.id)}
+                                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                                         mapped 
-                                          ? 'bg-green-500 text-white' 
-                                          : 'bg-muted'
-                                      }`}>
-                                        {mapped ? <Check className="h-4 w-4" /> : null}
+                                          ? 'border-primary bg-primary/5' 
+                                          : 'border-muted hover:border-primary/30'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="min-w-0 flex-1">
+                                          <h5 className="font-medium truncate">{item.name}</h5>
+                                          <p className="text-sm text-muted-foreground truncate">
+                                            {item.type || item.position || item.lnbType || ''}
+                                          </p>
+                                        </div>
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ml-2 ${
+                                          mapped 
+                                            ? 'bg-primary text-primary-foreground' 
+                                            : 'bg-muted'
+                                        }`}>
+                                          {mapped ? <Check className="h-4 w-4" /> : null}
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Import Dialog */}
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Import Mappings from Project</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5 text-primary" />
+              Import Mappings
+            </DialogTitle>
             <DialogDescription>
-              Select a project to import its equipment mappings into "{selectedProject?.name}"
+              Import equipment mappings from another project
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label>Source Project</Label>
-            <Select value={importSourceProject} onValueChange={setImportSourceProject}>
-              <SelectTrigger className="mt-2">
-                <SelectValue placeholder="Select a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects
-                  .filter(p => p.id !== selectedProject?.id)
-                  .map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Source Project</Label>
+              <Select value={importSourceProject} onValueChange={setImportSourceProject}>
+                <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
+                <SelectContent>
+                  {projects.filter(p => p.id !== selectedProject?.id).map(project => (
+                    <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleImportMappings}>Import Mappings</Button>
+            <Button onClick={handleImportMappings} disabled={isSaving}>
+              {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importing...</> : "Import"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bin Generation Dialog */}
+      <Dialog open={isBinDialogOpen} onOpenChange={setIsBinDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCode className="h-5 w-5 text-primary" />
+              Generate Bin File
+            </DialogTitle>
+            <DialogDescription>
+              Generate a bin file from this project's configuration
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              This will generate an XML configuration file containing all mapped equipment and satellites for project "{selectedProject?.name}".
+            </p>
+            <div className="bg-muted/50 p-3 rounded-lg text-sm">
+              <p><strong>LNBs:</strong> {getMappingCount('lnbs')}</p>
+              <p><strong>Switches:</strong> {getMappingCount('switches')}</p>
+              <p><strong>Motors:</strong> {getMappingCount('motors')}</p>
+              <p><strong>Unicables:</strong> {getMappingCount('unicables')}</p>
+              <p><strong>Satellites:</strong> {getMappingCount('satellites')}</p>
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsBinDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleGenerateBin} disabled={isGeneratingBin}>
+              {isGeneratingBin ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</> : "Generate & Download"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -459,14 +637,17 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{selectedProject?.name}"? This will also remove all equipment mappings. This action cannot be undone.
+              Are you sure you want to delete project "{selectedProject?.name}"? All mappings will be removed. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteProject} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

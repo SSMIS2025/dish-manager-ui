@@ -38,29 +38,29 @@ interface EquipmentTableProps {
 
 const colorSchemes = {
   green: {
-    header: 'bg-gradient-to-r from-green-500/10 to-green-600/5',
-    badge: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    row: 'hover:bg-green-50/50 dark:hover:bg-green-950/30'
+    header: 'bg-primary/5',
+    badge: 'bg-primary/10 text-primary',
+    row: 'hover:bg-primary/5'
   },
   orange: {
-    header: 'bg-gradient-to-r from-orange-500/10 to-orange-600/5',
-    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-    row: 'hover:bg-orange-50/50 dark:hover:bg-orange-950/30'
+    header: 'bg-primary/5',
+    badge: 'bg-primary/10 text-primary',
+    row: 'hover:bg-primary/5'
   },
   purple: {
-    header: 'bg-gradient-to-r from-purple-500/10 to-purple-600/5',
-    badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-    row: 'hover:bg-purple-50/50 dark:hover:bg-purple-950/30'
+    header: 'bg-primary/5',
+    badge: 'bg-primary/10 text-primary',
+    row: 'hover:bg-primary/5'
   },
   pink: {
-    header: 'bg-gradient-to-r from-pink-500/10 to-pink-600/5',
-    badge: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
-    row: 'hover:bg-pink-50/50 dark:hover:bg-pink-950/30'
+    header: 'bg-primary/5',
+    badge: 'bg-primary/10 text-primary',
+    row: 'hover:bg-primary/5'
   },
   blue: {
-    header: 'bg-gradient-to-r from-blue-500/10 to-blue-600/5',
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    row: 'hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
+    header: 'bg-primary/5',
+    badge: 'bg-primary/10 text-primary',
+    row: 'hover:bg-primary/5'
   }
 };
 
