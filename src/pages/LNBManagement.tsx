@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Radio } from "lucide-react";
+import { Plus, Radio, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
@@ -14,15 +14,14 @@ import { EquipmentTable } from "@/components/EquipmentTable";
 interface LNBDevice {
   id: string;
   name: string;
-  type: string;
-  frequency: string;
-  polarization: string;
-  skew: string;
-  band: string;
-  noiseFigure: string;
-  localOscillator: string;
-  gain: string;
-  testResult: string;
+  lnbType: string;
+  bandType: string;
+  lnbPowerControl: string;
+  vControl: string;
+  repeatMode: string;
+  khzOption: string;
+  lowFrequency: string;
+  highFrequency: string;
 }
 
 interface LNBManagementProps {
@@ -35,37 +34,51 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<LNBDevice | null>(null);
   const [formData, setFormData] = useState<Partial<LNBDevice>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const nameRef = useRef<HTMLInputElement>(null);
+  const lowFreqRef = useRef<HTMLInputElement>(null);
+  const highFreqRef = useRef<HTMLInputElement>(null);
 
-  const lnbTypes = ["Universal", "Single", "Twin", "Quad", "Octo"];
-  const bands = ["C-Band", "Ku-Band", "Ka-Band", "L-Band"];
-  const polarizations = ["Horizontal", "Vertical", "Circular"];
+  const lnbTypes = ["Universal", "Single", "Twin", "Quad", "Octo", "Wideband"];
+  const bandTypes = ["C-Band", "Ku-Band", "Ka-Band", "L-Band"];
+  const powerControls = ["Auto", "13V", "18V", "Off"];
+  const vControls = ["Enabled", "Disabled"];
+  const repeatModes = ["Single", "Continuous", "Off"];
+  const khzOptions = ["Auto", "On", "Off"];
 
   useEffect(() => {
     loadDevices();
   }, []);
 
   const loadDevices = async () => {
-    const allDevices = await apiService.getEquipment('lnbs');
-    const lnbDevices: LNBDevice[] = allDevices.map(device => ({
-      id: device.id,
-      name: device.name,
-      type: device.type,
-      frequency: device.frequency || "",
-      polarization: device.polarization || "",
-      skew: device.skew || "",
-      band: device.band || "",
-      noiseFigure: device.noiseFigure || "",
-      localOscillator: device.localOscillator || "",
-      gain: device.gain || "",
-      testResult: device.testResult || "Not Tested"
-    }));
-    setDevices(lnbDevices);
+    setIsLoading(true);
+    try {
+      const allDevices = await apiService.getEquipment('lnbs');
+      const lnbDevices: LNBDevice[] = allDevices.map(device => ({
+        id: device.id,
+        name: device.name,
+        lnbType: device.lnbType || device.type || "",
+        bandType: device.bandType || device.band || "",
+        lnbPowerControl: device.lnbPowerControl || "Auto",
+        vControl: device.vControl || "Enabled",
+        repeatMode: device.repeatMode || "Single",
+        khzOption: device.khzOption || "Auto",
+        lowFrequency: device.lowFrequency || "",
+        highFrequency: device.highFrequency || ""
+      }));
+      setDevices(lnbDevices);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAdd = () => {
     setEditingDevice(null);
     setFormData({});
     setIsDialogOpen(true);
+    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEdit = (device: LNBDevice) => {
@@ -75,89 +88,128 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    const device = devices.find(d => d.id === id);
-    await apiService.deleteEquipment('lnbs', id);
-    await apiService.logActivity(username, "LNB Deleted", `Deleted LNB: ${device?.name}`, 'global');
-    
-    loadDevices();
-    toast({
-      title: "LNB Deleted",
-      description: "The LNB device has been successfully removed.",
-    });
+    setIsLoading(true);
+    try {
+      const device = devices.find(d => d.id === id);
+      await apiService.deleteEquipment('lnbs', id);
+      await apiService.logActivity(username, "LNB Deleted", `Deleted LNB: ${device?.name}`, 'global');
+      
+      loadDevices();
+      toast({
+        title: "LNB Deleted",
+        description: "The LNB device has been successfully removed.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const validateForm = (): boolean => {
+    if (!formData.name?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Device name is required.",
+        variant: "destructive",
+      });
+      nameRef.current?.focus();
+      return false;
+    }
+
+    if (!formData.lnbType) {
+      toast({
+        title: "Validation Error",
+        description: "LNB Type is required.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.lowFrequency?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Low Frequency is required.",
+        variant: "destructive",
+      });
+      lowFreqRef.current?.focus();
+      return false;
+    }
+
+    if (!formData.highFrequency?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "High Frequency is required.",
+        variant: "destructive",
+      });
+      highFreqRef.current?.focus();
+      return false;
+    }
+
+    return true;
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.type) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!validateForm()) return;
 
-    // Check for duplicates
-    const isDuplicate = await apiService.checkDuplicate('lnbs', formData.name!, editingDevice?.id);
-    if (isDuplicate) {
-      toast({
-        title: "Duplicate Entry",
-        description: "An LNB with this name already exists.",
-        variant: "destructive",
-      });
-      return;
-    }
+    setIsSaving(true);
+    try {
+      // Check for duplicates
+      const isDuplicate = await apiService.checkDuplicate('lnbs', formData.name!, editingDevice?.id);
+      if (isDuplicate) {
+        toast({
+          title: "Duplicate Entry",
+          description: "An LNB with this name already exists.",
+          variant: "destructive",
+        });
+        nameRef.current?.focus();
+        return;
+      }
 
-    const deviceData = {
-      name: formData.name,
-      type: formData.type,
-      frequency: formData.frequency || "",
-      polarization: formData.polarization || "",
-      skew: formData.skew || "",
-      band: formData.band || "",
-      noiseFigure: formData.noiseFigure || "",
-      localOscillator: formData.localOscillator || "",
-      gain: formData.gain || "",
-      testResult: formData.testResult || "Not Tested"
-    };
+      const deviceData = {
+        name: formData.name!,
+        type: formData.lnbType!,
+        lnbType: formData.lnbType!,
+        bandType: formData.bandType || "",
+        lnbPowerControl: formData.lnbPowerControl || "Auto",
+        vControl: formData.vControl || "Enabled",
+        repeatMode: formData.repeatMode || "Single",
+        khzOption: formData.khzOption || "Auto",
+        lowFrequency: formData.lowFrequency!,
+        highFrequency: formData.highFrequency!
+      };
 
-    if (editingDevice) {
-      await apiService.updateEquipment('lnbs', editingDevice.id, deviceData);
-      await apiService.logActivity(username, "LNB Updated", `Updated LNB: ${formData.name}`, 'global');
+      if (editingDevice) {
+        await apiService.updateEquipment('lnbs', editingDevice.id, deviceData);
+        await apiService.logActivity(username, "LNB Updated", `Updated LNB: ${formData.name}`, 'global');
+        
+        toast({
+          title: "LNB Updated",
+          description: "The LNB device has been successfully updated.",
+        });
+      } else {
+        await apiService.saveEquipment('lnbs', deviceData);
+        await apiService.logActivity(username, "LNB Added", `Added new LNB: ${formData.name}`, 'global');
+        
+        toast({
+          title: "LNB Added",
+          description: "The new LNB device has been successfully added.",
+        });
+      }
       
-      toast({
-        title: "LNB Updated",
-        description: "The LNB device has been successfully updated.",
-      });
-    } else {
-      await apiService.saveEquipment('lnbs', deviceData);
-      await apiService.logActivity(username, "LNB Added", `Added new LNB: ${formData.name}`, 'global');
-      
-      toast({
-        title: "LNB Added",
-        description: "The new LNB device has been successfully added.",
-      });
+      loadDevices();
+      setIsDialogOpen(false);
+      setFormData({});
+    } finally {
+      setIsSaving(false);
     }
-    
-    loadDevices();
-    setIsDialogOpen(false);
-    setFormData({});
   };
 
   const columns = [
     { key: 'name', label: 'Name', sortable: true },
-    { key: 'type', label: 'Type', sortable: true },
-    { key: 'band', label: 'Band', sortable: true },
-    { key: 'frequency', label: 'Frequency' },
-    { key: 'polarization', label: 'Polarization' },
-    { 
-      key: 'testResult', 
-      label: 'Test Result',
-      render: (value: string) => (
-        <Badge variant={value === 'Passed' ? 'default' : value === 'Failed' ? 'destructive' : 'secondary'}>
-          {value || 'Not Tested'}
-        </Badge>
-      )
-    }
+    { key: 'lnbType', label: 'LNB Type', sortable: true },
+    { key: 'bandType', label: 'Band Type', sortable: true },
+    { key: 'lnbPowerControl', label: 'Power Control' },
+    { key: 'lowFrequency', label: 'Low Freq' },
+    { key: 'highFrequency', label: 'High Freq' }
   ];
 
   return (
@@ -166,8 +218,8 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-              <Radio className="h-5 w-5 text-white" />
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+              <Radio className="h-5 w-5 text-primary-foreground" />
             </div>
             LNB Management
           </h2>
@@ -177,10 +229,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button 
-              onClick={handleAdd}
-              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-            >
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary-hover">
               <Plus className="mr-2 h-4 w-4" />
               Add LNB
             </Button>
@@ -188,7 +237,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
-                <Radio className="h-5 w-5 text-green-600" />
+                <Radio className="h-5 w-5 text-primary" />
                 {editingDevice ? "Edit LNB Device" : "Add New LNB Device"}
               </DialogTitle>
               <DialogDescription>
@@ -199,6 +248,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               <div className="space-y-2">
                 <Label htmlFor="name">Device Name *</Label>
                 <Input
+                  ref={nameRef}
                   id="name"
                   value={formData.name || ""}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -206,10 +256,10 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">LNB Type *</Label>
+                <Label htmlFor="lnbType">LNB Type *</Label>
                 <Select
-                  value={formData.type || ""}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  value={formData.lnbType || ""}
+                  onValueChange={(value) => setFormData({ ...formData, lnbType: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select LNB type" />
@@ -222,105 +272,119 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="frequency">Frequency Range</Label>
-                <Input
-                  id="frequency"
-                  value={formData.frequency || ""}
-                  onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                  placeholder="e.g., 10.7-12.75 GHz"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="band">Band</Label>
+                <Label htmlFor="bandType">Band Type</Label>
                 <Select
-                  value={formData.band || ""}
-                  onValueChange={(value) => setFormData({ ...formData, band: value })}
+                  value={formData.bandType || ""}
+                  onValueChange={(value) => setFormData({ ...formData, bandType: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select band" />
+                    <SelectValue placeholder="Select band type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {bands.map((band) => (
+                    {bandTypes.map((band) => (
                       <SelectItem key={band} value={band}>{band}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="polarization">Polarization</Label>
+                <Label htmlFor="lnbPowerControl">LNB Power Control</Label>
                 <Select
-                  value={formData.polarization || ""}
-                  onValueChange={(value) => setFormData({ ...formData, polarization: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select polarization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {polarizations.map((pol) => (
-                      <SelectItem key={pol} value={pol}>{pol}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="skew">Skew</Label>
-                <Input
-                  id="skew"
-                  value={formData.skew || ""}
-                  onChange={(e) => setFormData({ ...formData, skew: e.target.value })}
-                  placeholder="e.g., 0°"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="noiseFigure">Noise Figure</Label>
-                <Input
-                  id="noiseFigure"
-                  value={formData.noiseFigure || ""}
-                  onChange={(e) => setFormData({ ...formData, noiseFigure: e.target.value })}
-                  placeholder="e.g., 0.1 dB"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="localOscillator">Local Oscillator</Label>
-                <Input
-                  id="localOscillator"
-                  value={formData.localOscillator || ""}
-                  onChange={(e) => setFormData({ ...formData, localOscillator: e.target.value })}
-                  placeholder="e.g., 9.75/10.6 GHz"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="gain">Gain</Label>
-                <Input
-                  id="gain"
-                  value={formData.gain || ""}
-                  onChange={(e) => setFormData({ ...formData, gain: e.target.value })}
-                  placeholder="e.g., 60 dB"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="testResult">Test Result</Label>
-                <Select
-                  value={formData.testResult || "Not Tested"}
-                  onValueChange={(value) => setFormData({ ...formData, testResult: value })}
+                  value={formData.lnbPowerControl || "Auto"}
+                  onValueChange={(value) => setFormData({ ...formData, lnbPowerControl: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Passed">Passed</SelectItem>
-                    <SelectItem value="Failed">Failed</SelectItem>
-                    <SelectItem value="Not Tested">Not Tested</SelectItem>
+                    {powerControls.map((ctrl) => (
+                      <SelectItem key={ctrl} value={ctrl}>{ctrl}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vControl">V-Control</Label>
+                <Select
+                  value={formData.vControl || "Enabled"}
+                  onValueChange={(value) => setFormData({ ...formData, vControl: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vControls.map((ctrl) => (
+                      <SelectItem key={ctrl} value={ctrl}>{ctrl}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="repeatMode">Repeat Mode</Label>
+                <Select
+                  value={formData.repeatMode || "Single"}
+                  onValueChange={(value) => setFormData({ ...formData, repeatMode: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repeatModes.map((mode) => (
+                      <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="khzOption">22KHz Option</Label>
+                <Select
+                  value={formData.khzOption || "Auto"}
+                  onValueChange={(value) => setFormData({ ...formData, khzOption: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {khzOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lowFrequency">Low Frequency (MHz) *</Label>
+                <Input
+                  ref={lowFreqRef}
+                  id="lowFrequency"
+                  value={formData.lowFrequency || ""}
+                  onChange={(e) => setFormData({ ...formData, lowFrequency: e.target.value })}
+                  placeholder="e.g., 9750"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="highFrequency">High Frequency (MHz) *</Label>
+                <Input
+                  ref={highFreqRef}
+                  id="highFrequency"
+                  value={formData.highFrequency || ""}
+                  onChange={(e) => setFormData({ ...formData, highFrequency: e.target.value })}
+                  placeholder="e.g., 10600"
+                />
               </div>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} className="bg-gradient-to-r from-green-500 to-green-600">
-                {editingDevice ? "Update" : "Add"} LNB
+              <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary-hover">
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>{editingDevice ? "Update" : "Add"} LNB</>
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -330,16 +394,23 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       {/* Table */}
       <Card>
         <CardContent className="p-6">
-          <EquipmentTable
-            data={devices}
-            columns={columns}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            itemsPerPage={20}
-            searchPlaceholder="Search LNBs..."
-            emptyMessage="No LNB devices found. Click 'Add LNB' to create one."
-            colorScheme="green"
-          />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading LNBs...</span>
+            </div>
+          ) : (
+            <EquipmentTable
+              data={devices}
+              columns={columns}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              itemsPerPage={20}
+              searchPlaceholder="Search LNBs..."
+              emptyMessage="No LNB devices found. Click 'Add LNB' to create one."
+              colorScheme="blue"
+            />
+          )}
         </CardContent>
       </Card>
     </div>

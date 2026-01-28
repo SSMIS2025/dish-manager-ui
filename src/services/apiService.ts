@@ -10,7 +10,14 @@ interface ApiResponse<T> {
 }
 
 class ApiService {
+  private loading = false;
+
+  isLoading() {
+    return this.loading;
+  }
+
   private async fetch<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>> {
+    this.loading = true;
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: {
@@ -28,7 +35,28 @@ class ApiService {
     } catch (error) {
       console.error('API Error:', error);
       return { success: false, error: String(error) };
+    } finally {
+      this.loading = false;
     }
+  }
+
+  // Authentication
+  async verifyLogin(username: string, password: string): Promise<{ valid: boolean; isAdmin: boolean }> {
+    if (STORAGE_MODE === 'local') {
+      // Local authentication
+      const users = [
+        { username: "admin", password: "admin123", isAdmin: true },
+        { username: "user", password: "user123", isAdmin: false },
+        { username: "operator", password: "op123", isAdmin: false }
+      ];
+      const user = users.find(u => u.username === username && u.password === password);
+      return { valid: !!user, isAdmin: user?.isAdmin || false };
+    }
+    const result = await this.fetch<{ valid: boolean; isAdmin: boolean }>('/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    return result.data || { valid: false, isAdmin: false };
   }
 
   // Projects
@@ -257,6 +285,45 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ username, action, details, projectId }),
     });
+  }
+
+  // Bin Generation
+  async generateBin(projectId: string, xmlData: string): Promise<{ success: boolean; binPath?: string; error?: string }> {
+    if (STORAGE_MODE === 'local') {
+      // Mock response for local mode
+      return { 
+        success: true, 
+        binPath: `/tmp/project_${projectId}.bin`,
+        error: 'Bin generation requires MySQL mode with backend server'
+      };
+    }
+    const result = await this.fetch<{ binPath: string }>('/projects/generate-bin', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, xmlData }),
+    });
+    return { 
+      success: result.success, 
+      binPath: result.data?.binPath,
+      error: result.error 
+    };
+  }
+
+  async createProjectFromBin(binPath: string): Promise<{ success: boolean; xmlData?: string; error?: string }> {
+    if (STORAGE_MODE === 'local') {
+      return { 
+        success: false, 
+        error: 'Bin import requires MySQL mode with backend server'
+      };
+    }
+    const result = await this.fetch<{ xmlData: string }>('/projects/import-bin', {
+      method: 'POST',
+      body: JSON.stringify({ binPath }),
+    });
+    return { 
+      success: result.success, 
+      xmlData: result.data?.xmlData,
+      error: result.error 
+    };
   }
 }
 

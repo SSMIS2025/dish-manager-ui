@@ -4,16 +4,17 @@ import {
   Radio, 
   Settings, 
   Zap, 
-  Router,
   LayoutDashboard,
   ChevronLeft,
   ChevronRight,
   Activity,
   FolderOpen,
-  RotateCcw
+  RotateCcw,
+  Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -36,66 +37,88 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
   const filteredNavigation = navigation.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <div className={cn(
-      "flex flex-col bg-card border-r border-border transition-all duration-500 ease-in-out transform",
-      collapsed ? "w-16" : "w-64"
-    )}>
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        {!collapsed && (
-          <div className="flex items-center space-x-3 animate-fade-in">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-              <Satellite className="w-6 h-6 text-primary-foreground" />
+    <TooltipProvider delayDuration={0}>
+      <div className={cn(
+        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-500 ease-in-out h-screen",
+        collapsed ? "w-[68px]" : "w-64"
+      )}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-sidebar-border h-16">
+          {!collapsed && (
+            <div className="flex items-center space-x-3 animate-fade-in">
+              <div className="w-9 h-9 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center shadow-lg">
+                <Satellite className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <span className="font-bold text-sidebar-foreground text-lg">SDB Tool</span>
             </div>
-            <span className="font-bold text-foreground text-lg">SDB Tool</span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggle}
+            className={cn(
+              "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-300",
+              collapsed && "mx-auto"
+            )}
+          >
+            {collapsed ? (
+              <Menu className="h-5 w-5" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-3 space-y-2 overflow-y-auto">
+          {filteredNavigation.map((item, index) => (
+            <Tooltip key={item.name}>
+              <TooltipTrigger asChild>
+                <NavLink
+                  to={item.href}
+                  end={item.href === "/"}
+                  className={({ isActive }) =>
+                    cn(
+                      "group flex items-center rounded-lg text-sm font-medium transition-all duration-300",
+                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      "border border-transparent",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-md border-primary/50"
+                        : "text-sidebar-foreground/80",
+                      collapsed ? "justify-center p-3" : "px-4 py-3",
+                      "animate-fade-in"
+                    )
+                  }
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <item.icon className={cn(
+                    "transition-all duration-300 shrink-0",
+                    collapsed ? "h-6 w-6" : "h-5 w-5 mr-3"
+                  )} />
+                  {!collapsed && (
+                    <span className="truncate">{item.name}</span>
+                  )}
+                </NavLink>
+              </TooltipTrigger>
+              {collapsed && (
+                <TooltipContent side="right" className="bg-popover text-popover-foreground border z-50">
+                  {item.name}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        {!collapsed && (
+          <div className="p-4 border-t border-sidebar-border">
+            <p className="text-xs text-sidebar-foreground/50 text-center">
+              SDB Management v2.0
+            </p>
           </div>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggle}
-          className="text-muted-foreground hover:text-foreground transition-all duration-300 hover:scale-110 hover:bg-accent/20"
-        >
-          {collapsed ? (
-            <ChevronRight className="h-5 w-5 animate-fade-in" />
-          ) : (
-            <ChevronLeft className="h-5 w-5 animate-fade-in" />
-          )}
-        </Button>
       </div>
-
-      <nav className="flex-1 p-4 space-y-3">
-        {filteredNavigation.map((item, index) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            end={item.href === "/"}
-            className={({ isActive }) =>
-              cn(
-                "group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105",
-                "hover:bg-gradient-to-r hover:from-accent/20 hover:to-primary/10 hover:text-accent-foreground hover:shadow-md",
-                "border border-transparent hover:border-accent/20",
-                isActive
-                  ? "bg-gradient-to-r from-primary/15 to-accent/15 text-primary border-primary/30 shadow-lg scale-105"
-                  : "text-muted-foreground hover:text-foreground",
-                collapsed ? "justify-center" : "justify-start",
-                "animate-fade-in"
-              )
-            }
-            style={{ animationDelay: `${index * 100}ms` }}
-          >
-            <item.icon className={cn(
-              "transition-all duration-300 group-hover:scale-110",
-              collapsed ? "h-7 w-7" : "h-6 w-6 mr-4"
-            )} />
-            {!collapsed && (
-              <span className="animate-fade-in transition-all duration-300">
-                {item.name}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-    </div>
+    </TooltipProvider>
   );
 };
 
