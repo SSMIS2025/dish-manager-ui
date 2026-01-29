@@ -115,7 +115,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setIsDialogOpen(true);
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = async (): Promise<boolean> => {
     if (!formData.name?.trim()) {
       toast({
         title: "Validation Error",
@@ -125,11 +125,28 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       nameRef.current?.focus();
       return false;
     }
+
+    // Check for duplicate name
+    const isDuplicate = await apiService.checkProjectDuplicate(
+      formData.name, 
+      editingProject?.id
+    );
+    if (isDuplicate) {
+      toast({
+        title: "Duplicate Name",
+        description: "A project with this name already exists.",
+        variant: "destructive",
+      });
+      nameRef.current?.focus();
+      return false;
+    }
+
     return true;
   };
 
   const handleSaveProject = async () => {
-    if (!validateForm()) return;
+    const isValid = await validateForm();
+    if (!isValid) return;
 
     setIsSaving(true);
     try {
@@ -233,44 +250,87 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     const mappedUnicables = allUnicables.filter(u => isMapped('unicables', u.id));
     const mappedSats = allSatellites.filter(s => isMapped('satellites', s.id));
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    xml += `<Project name="${selectedProject.name}">\n`;
-    xml += `  <Description>${selectedProject.description || ''}</Description>\n`;
-    xml += `  <CreatedBy>${selectedProject.createdBy}</CreatedBy>\n`;
-    xml += `  <LNBs>\n`;
-    mappedLnbs.forEach(l => {
-      xml += `    <LNB id="${l.id}" name="${l.name}" type="${l.lnbType || l.type}" lowFreq="${l.lowFrequency}" highFreq="${l.highFrequency}" />\n`;
-    });
-    xml += `  </LNBs>\n`;
-    xml += `  <Switches>\n`;
-    mappedSwitches.forEach(s => {
-      xml += `    <Switch id="${s.id}" name="${s.name}" type="${s.switchType || s.type}" config="${s.switchConfiguration}" />\n`;
-    });
-    xml += `  </Switches>\n`;
-    xml += `  <Motors>\n`;
-    mappedMotors.forEach(m => {
-      xml += `    <Motor id="${m.id}" name="${m.name}" type="${m.type}" position="${m.position}" longitude="${m.longitude}" latitude="${m.latitude}" />\n`;
-    });
-    xml += `  </Motors>\n`;
-    xml += `  <Unicables>\n`;
-    mappedUnicables.forEach(u => {
-      xml += `    <Unicable id="${u.id}" name="${u.name}" type="${u.type}" port="${u.port}" />\n`;
-    });
-    xml += `  </Unicables>\n`;
-    xml += `  <Satellites>\n`;
-    mappedSats.forEach(sat => {
-      xml += `    <Satellite id="${sat.id}" name="${sat.name}" position="${sat.position}" direction="${sat.direction}">\n`;
-      (sat.carriers || []).forEach((c: any) => {
-        xml += `      <Carrier id="${c.id}" name="${c.name}" frequency="${c.frequency}" polarization="${c.polarization}" symbolRate="${c.symbolRate}" fec="${c.fec}">\n`;
-        (c.services || []).forEach((s: any) => {
-          xml += `        <Service id="${s.id}" name="${s.name}" videoPid="${s.videoPid}" pcrPid="${s.pcrPid}" programNumber="${s.programNumber}" />\n`;
-        });
-        xml += `      </Carrier>\n`;
+    // Build XML in the specified format
+    let xml = `<SDB>\n`;
+    xml += `<projinfo>\n`;
+    xml += `<projname>${selectedProject.name}</projname>\n`;
+    
+    // LNB Block
+    if (mappedLnbs.length > 0) {
+      xml += `<LNBlock>\n`;
+      mappedLnbs.forEach(l => {
+        xml += `<LNBType>${l.lnbType || l.type || 'Universal'}</LNBType>\n`;
+        xml += `<LowFrequency>${l.lowFrequency || ''}</LowFrequency>\n`;
+        xml += `<HighFrequency>${l.highFrequency || ''}</HighFrequency>\n`;
+        xml += `<BandType>${l.bandType || ''}</BandType>\n`;
+        xml += `<PowerControl>${l.powerControl || ''}</PowerControl>\n`;
       });
-      xml += `    </Satellite>\n`;
+      xml += `</LNBlock>\n`;
+    }
+    
+    // Switch Block
+    if (mappedSwitches.length > 0) {
+      const switchType = mappedSwitches[0]?.switchType || 'Dis1';
+      xml += `<switchblock type='${switchType}' noofSwi='${mappedSwitches.length}'>\n`;
+      mappedSwitches.forEach(s => {
+        xml += `<switch>${s.switchConfiguration || ''}</switch>\n`;
+      });
+      xml += `</switchblock>\n`;
+    }
+    
+    // Motor Block
+    xml += `<motor>\n`;
+    mappedMotors.forEach(m => {
+      xml += `<name>${m.name}</name>\n`;
+      xml += `<type>${m.type || ''}</type>\n`;
+      xml += `<position>${m.position || ''}</position>\n`;
+      xml += `<longitude>${m.longitude || ''}</longitude>\n`;
+      xml += `<latitude>${m.latitude || ''}</latitude>\n`;
+      xml += `<status>${m.status || ''}</status>\n`;
     });
-    xml += `  </Satellites>\n`;
-    xml += `</Project>`;
+    xml += `</motor>\n`;
+    
+    // Unicable Block
+    xml += `<unicable>\n`;
+    mappedUnicables.forEach(u => {
+      xml += `<name>${u.name}</name>\n`;
+      xml += `<type>${u.type || ''}</type>\n`;
+      xml += `<port>${u.port || ''}</port>\n`;
+      xml += `<status>${u.status || ''}</status>\n`;
+    });
+    xml += `</unicable>\n`;
+    
+    // Satellite Block
+    xml += `<sattliteblock>\n`;
+    mappedSats.forEach(sat => {
+      xml += `<sattliteinfo>\n`;
+      xml += `<name>${sat.name}</name>\n`;
+      xml += `<position>${sat.position || ''}</position>\n`;
+      xml += `<direction>${sat.direction || ''}</direction>\n`;
+      (sat.carriers || []).forEach((c: any) => {
+        xml += `<carrers>\n`;
+        xml += `<name>${c.name}</name>\n`;
+        xml += `<frequency>${c.frequency || ''}</frequency>\n`;
+        xml += `<polarization>${c.polarization || ''}</polarization>\n`;
+        xml += `<symbolRate>${c.symbolRate || ''}</symbolRate>\n`;
+        xml += `<fec>${c.fec || ''}</fec>\n`;
+        (c.services || []).forEach((s: any) => {
+          xml += `<services>\n`;
+          xml += `<name>${s.name}</name>\n`;
+          xml += `<frequency>${s.frequency || ''}</frequency>\n`;
+          xml += `<videoPid>${s.videoPid || ''}</videoPid>\n`;
+          xml += `<pcrPid>${s.pcrPid || ''}</pcrPid>\n`;
+          xml += `<programNumber>${s.programNumber || ''}</programNumber>\n`;
+          xml += `</services>\n`;
+        });
+        xml += `</carrers>\n`;
+      });
+      xml += `</sattliteinfo>\n`;
+    });
+    xml += `</sattliteblock>\n`;
+    
+    xml += `</projinfo>\n`;
+    xml += `</SDB>`;
     
     return xml;
   };

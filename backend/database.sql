@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS satellites (
     position VARCHAR(50),
     age VARCHAR(100),
     direction VARCHAR(50),
+    mapped_lnb VARCHAR(50),
+    mapped_switch VARCHAR(50),
+    mapped_motor VARCHAR(50),
+    mapped_unicable VARCHAR(50),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -88,11 +92,11 @@ CREATE TABLE IF NOT EXISTS carriers (
     satellite_id VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
     frequency VARCHAR(100),
-    frequency_type VARCHAR(50),
     polarization VARCHAR(50),
     symbol_rate VARCHAR(50),
     fec VARCHAR(50),
-    modulation VARCHAR(50),
+    fec_mode VARCHAR(50),
+    factory_default TINYINT(1) DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (satellite_id) REFERENCES satellites(id) ON DELETE CASCADE
 );
@@ -102,10 +106,14 @@ CREATE TABLE IF NOT EXISTS services (
     id VARCHAR(50) PRIMARY KEY,
     carrier_id VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    type VARCHAR(50),
-    sid VARCHAR(50),
-    vpid VARCHAR(50),
-    apid VARCHAR(50),
+    frequency VARCHAR(100),
+    video_pid VARCHAR(50),
+    pcr_pid VARCHAR(50),
+    program_number VARCHAR(50),
+    fav_group VARCHAR(50),
+    factory_default TINYINT(1) DEFAULT 0,
+    preference VARCHAR(50),
+    scramble TINYINT(1) DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (carrier_id) REFERENCES carriers(id) ON DELETE CASCADE
 );
