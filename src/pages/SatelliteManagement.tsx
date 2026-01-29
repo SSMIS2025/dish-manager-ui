@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, Loader2, Settings } from "lucide-react";
+import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, Loader2, Settings, Search, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import {
@@ -80,6 +80,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   
+  // Filter states
+  const [satelliteFilter, setSatelliteFilter] = useState("");
+  const [carrierFilter, setCarrierFilter] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("");
+  const [polarizationFilter, setPolarizationFilter] = useState("all");
+  
   // Equipment lists for mapping
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
   const [allSwitches, setAllSwitches] = useState<any[]>([]);
@@ -108,6 +114,32 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     loadSatellites();
     loadEquipment();
   }, []);
+
+  // Filtered satellites
+  const filteredSatellites = satellites.filter(sat => 
+    sat.name.toLowerCase().includes(satelliteFilter.toLowerCase()) ||
+    sat.position.toLowerCase().includes(satelliteFilter.toLowerCase())
+  );
+
+  // Filtered carriers
+  const getFilteredCarriers = () => {
+    if (!selectedSatellite) return [];
+    return selectedSatellite.carriers.filter(carrier => {
+      const matchesName = carrier.name.toLowerCase().includes(carrierFilter.toLowerCase()) ||
+        carrier.frequency.toLowerCase().includes(carrierFilter.toLowerCase());
+      const matchesPolarization = polarizationFilter === "all" || carrier.polarization === polarizationFilter;
+      return matchesName && matchesPolarization;
+    });
+  };
+
+  // Filtered services
+  const getFilteredServices = () => {
+    if (!selectedCarrier) return [];
+    return (selectedCarrier.services || []).filter(service =>
+      service.name.toLowerCase().includes(serviceFilter.toLowerCase()) ||
+      (service.frequency && service.frequency.toLowerCase().includes(serviceFilter.toLowerCase()))
+    );
+  };
 
   const loadSatellites = async () => {
     setIsLoading(true);
@@ -205,7 +237,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     }
   };
 
-  const validateSatelliteForm = (): boolean => {
+  const validateSatelliteForm = async (): Promise<boolean> => {
     if (!formData.name?.trim()) {
       toast({ title: "Validation Error", description: "Satellite name is required.", variant: "destructive" });
       nameRef.current?.focus();
@@ -215,11 +247,24 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       toast({ title: "Validation Error", description: "Position is required.", variant: "destructive" });
       return false;
     }
+
+    // Check for duplicate name
+    const isDuplicate = await apiService.checkSatelliteDuplicate(
+      formData.name,
+      editingSatellite?.id
+    );
+    if (isDuplicate) {
+      toast({ title: "Duplicate Name", description: "A satellite with this name already exists.", variant: "destructive" });
+      nameRef.current?.focus();
+      return false;
+    }
+
     return true;
   };
 
   const handleSave = async () => {
-    if (!validateSatelliteForm()) return;
+    const isValid = await validateSatelliteForm();
+    if (!isValid) return;
 
     setIsSaving(true);
     try {
@@ -510,15 +555,24 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
             <CardHeader className="py-3">
               <CardTitle className="text-lg flex items-center justify-between">
                 Satellites
-                <Badge variant="secondary">{satellites.length}</Badge>
+                <Badge variant="secondary">{filteredSatellites.length}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[calc(100vh-280px)]">
-                {satellites.length === 0 ? (
+            <CardContent className="p-3 pt-0">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filter satellites..."
+                  value={satelliteFilter}
+                  onChange={(e) => setSatelliteFilter(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <ScrollArea className="h-[calc(100vh-340px)]">
+                {filteredSatellites.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No satellites found</p>
                 ) : (
-                  satellites.map((satellite) => (
+                  filteredSatellites.map((satellite) => (
                     <div
                       key={satellite.id}
                       onClick={() => handleSelectSatellite(satellite)}
@@ -600,8 +654,29 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                     </TabsList>
                     
                     <TabsContent value="carriers">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-medium">Carrier List</h4>
+                      <div className="flex items-center justify-between mb-3 gap-4">
+                        <div className="flex items-center gap-3 flex-1">
+                          <h4 className="font-medium">Carrier List</h4>
+                          <div className="relative flex-1 max-w-xs">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Filter carriers..."
+                              value={carrierFilter}
+                              onChange={(e) => setCarrierFilter(e.target.value)}
+                              className="pl-9"
+                            />
+                          </div>
+                          <Select value={polarizationFilter} onValueChange={setPolarizationFilter}>
+                            <SelectTrigger className="w-40">
+                              <Filter className="h-4 w-4 mr-2" />
+                              <SelectValue placeholder="Polarization" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Polarizations</SelectItem>
+                              {polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <Button size="sm" onClick={handleAddCarrier}><Plus className="h-4 w-4 mr-1" /> Add Carrier</Button>
                       </div>
                       <div className="rounded-lg border overflow-hidden">
@@ -619,10 +694,10 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {selectedSatellite.carriers.length === 0 ? (
-                              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No carriers. Click "Add Carrier" to create one.</TableCell></TableRow>
+                            {getFilteredCarriers().length === 0 ? (
+                              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No carriers found.</TableCell></TableRow>
                             ) : (
-                              selectedSatellite.carriers.map((carrier, index) => (
+                              getFilteredCarriers().map((carrier, index) => (
                                 <TableRow key={carrier.id} className="hover:bg-muted/30">
                                   <TableCell>{index + 1}</TableCell>
                                   <TableCell className="font-medium">{carrier.name}</TableCell>
@@ -646,13 +721,24 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                     </TabsContent>
 
                     <TabsContent value="services">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between mb-3 gap-4">
+                        <div className="flex items-center gap-3 flex-1">
                           <h4 className="font-medium">Services</h4>
                           <Select value={selectedCarrier?.id || ""} onValueChange={(id) => setSelectedCarrier(selectedSatellite.carriers.find(c => c.id === id) || null)}>
                             <SelectTrigger className="w-48"><SelectValue placeholder="Select carrier" /></SelectTrigger>
                             <SelectContent>{selectedSatellite.carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                           </Select>
+                          {selectedCarrier && (
+                            <div className="relative flex-1 max-w-xs">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                placeholder="Filter services..."
+                                value={serviceFilter}
+                                onChange={(e) => setServiceFilter(e.target.value)}
+                                className="pl-9"
+                              />
+                            </div>
+                          )}
                         </div>
                         {selectedCarrier && <Button size="sm" onClick={() => handleAddService(selectedCarrier)}><Plus className="h-4 w-4 mr-1" /> Add Service</Button>}
                       </div>
@@ -674,10 +760,10 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {(selectedCarrier.services || []).length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No services in this carrier.</TableCell></TableRow>
+                              {getFilteredServices().length === 0 ? (
+                                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No services found.</TableCell></TableRow>
                               ) : (
-                                selectedCarrier.services.map((service, index) => (
+                                getFilteredServices().map((service, index) => (
                                   <TableRow key={service.id} className="hover:bg-muted/30">
                                     <TableCell>{index + 1}</TableCell>
                                     <TableCell className="font-medium">{service.name}</TableCell>

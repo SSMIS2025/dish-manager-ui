@@ -40,6 +40,15 @@ class ApiService {
     }
   }
 
+  // Database connection check
+  async checkDatabaseConnection(): Promise<boolean> {
+    if (STORAGE_MODE === 'local') {
+      return true;
+    }
+    const result = await this.fetch<{ message: string }>('/health');
+    return result.success;
+  }
+
   // Authentication
   async verifyLogin(username: string, password: string): Promise<{ valid: boolean; isAdmin: boolean }> {
     if (STORAGE_MODE === 'local') {
@@ -66,6 +75,15 @@ class ApiService {
     }
     const result = await this.fetch<Project[]>('/projects');
     return result.data || [];
+  }
+
+  async checkProjectDuplicate(name: string, excludeId?: string): Promise<boolean> {
+    if (STORAGE_MODE === 'local') {
+      const projects = storageService.getProjects();
+      return projects.some(p => p.name.toLowerCase() === name.toLowerCase() && p.id !== excludeId);
+    }
+    const result = await this.fetch<{ exists: boolean }>(`/projects/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`);
+    return result.data?.exists || false;
   }
 
   async saveProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project | null> {
@@ -96,6 +114,112 @@ class ApiService {
     }
     const result = await this.fetch(`/projects/${id}`, { method: 'DELETE' });
     return result.success;
+  }
+
+  async createProjectFromXML(projectData: any, createdBy: string): Promise<Project | null> {
+    if (STORAGE_MODE === 'local') {
+      // Create project locally with all equipment
+      const project = storageService.saveProject({
+        name: projectData.name,
+        description: projectData.description || '',
+        createdBy
+      });
+      
+      if (!project) return null;
+      
+      // Create equipment and mappings
+      const mappingsKey = 'sdb_project_mappings';
+      const mappings = JSON.parse(localStorage.getItem(mappingsKey) || '[]');
+      
+      // Create LNBs
+      if (projectData.lnbs) {
+        for (const lnb of projectData.lnbs) {
+          const saved = storageService.saveEquipment('lnbs', lnb, 'global');
+          if (saved) {
+            mappings.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              projectId: project.id,
+              equipmentType: 'lnbs',
+              equipmentId: saved.id,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // Create Switches
+      if (projectData.switches) {
+        for (const sw of projectData.switches) {
+          const saved = storageService.saveEquipment('switches', sw, 'global');
+          if (saved) {
+            mappings.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              projectId: project.id,
+              equipmentType: 'switches',
+              equipmentId: saved.id,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // Create Motors
+      if (projectData.motors) {
+        for (const motor of projectData.motors) {
+          const saved = storageService.saveEquipment('motors', motor, 'global');
+          if (saved) {
+            mappings.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              projectId: project.id,
+              equipmentType: 'motors',
+              equipmentId: saved.id,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // Create Unicables
+      if (projectData.unicables) {
+        for (const unicable of projectData.unicables) {
+          const saved = storageService.saveEquipment('unicables', unicable, 'global');
+          if (saved) {
+            mappings.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              projectId: project.id,
+              equipmentType: 'unicables',
+              equipmentId: saved.id,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // Create Satellites
+      if (projectData.satellites) {
+        for (const sat of projectData.satellites) {
+          const saved = storageService.saveEquipment('satellites', sat, 'global');
+          if (saved) {
+            mappings.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              projectId: project.id,
+              equipmentType: 'satellites',
+              equipmentId: saved.id,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      localStorage.setItem(mappingsKey, JSON.stringify(mappings));
+      return project;
+    }
+    
+    const result = await this.fetch<Project>('/projects/from-xml', {
+      method: 'POST',
+      body: JSON.stringify({ projectData, createdBy }),
+    });
+    return result.data || null;
   }
 
   // Equipment (Global Bucket - no project filtering)
@@ -153,6 +277,15 @@ class ApiService {
     }
     const result = await this.fetch<Equipment[]>('/satellites');
     return result.data || [];
+  }
+
+  async checkSatelliteDuplicate(name: string, excludeId?: string): Promise<boolean> {
+    if (STORAGE_MODE === 'local') {
+      const satellites = storageService.getEquipment('satellites');
+      return satellites.some(s => s.name.toLowerCase() === name.toLowerCase() && s.id !== excludeId);
+    }
+    const result = await this.fetch<{ exists: boolean }>(`/satellites/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`);
+    return result.data?.exists || false;
   }
 
   async saveSatellite(satellite: any): Promise<Equipment | null> {
@@ -292,12 +425,11 @@ class ApiService {
     if (STORAGE_MODE === 'local') {
       // Mock response for local mode
       return { 
-        success: true, 
-        binPath: `/tmp/project_${projectId}.bin`,
+        success: false, 
         error: 'Bin generation requires MySQL mode with backend server'
       };
     }
-    const result = await this.fetch<{ binPath: string }>('/projects/generate-bin', {
+    const result = await this.fetch<{ binPath: string }>('/bin/generate', {
       method: 'POST',
       body: JSON.stringify({ projectId, xmlData }),
     });
@@ -308,16 +440,31 @@ class ApiService {
     };
   }
 
-  async createProjectFromBin(binPath: string): Promise<{ success: boolean; xmlData?: string; error?: string }> {
+  async downloadBin(projectId: string): Promise<Blob | null> {
+    if (STORAGE_MODE === 'local') {
+      return null;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/bin/download/${projectId}`);
+      if (response.ok) {
+        return await response.blob();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async importBin(binData: string): Promise<{ success: boolean; xmlData?: string; error?: string }> {
     if (STORAGE_MODE === 'local') {
       return { 
         success: false, 
         error: 'Bin import requires MySQL mode with backend server'
       };
     }
-    const result = await this.fetch<{ xmlData: string }>('/projects/import-bin', {
+    const result = await this.fetch<{ xmlData: string }>('/bin/import', {
       method: 'POST',
-      body: JSON.stringify({ binPath }),
+      body: JSON.stringify({ binData }),
     });
     return { 
       success: result.success, 

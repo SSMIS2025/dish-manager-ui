@@ -6,11 +6,11 @@ import {
   Zap, 
   LayoutDashboard,
   ChevronLeft,
-  ChevronRight,
   Activity,
   FolderOpen,
   RotateCcw,
-  Menu
+  Menu,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,8 +28,9 @@ const navigation = [
   { name: "Switch Management", href: "/switch", icon: Zap, adminOnly: false },
   { name: "Motor Management", href: "/motor", icon: RotateCcw, adminOnly: false },
   { name: "Unicable Management", href: "/unicable", icon: Activity, adminOnly: false },
-  { name: "Satellite", href: "/satellite", icon: Satellite, adminOnly: true },
+  { name: "Satellite", href: "/satellite", icon: Satellite, adminOnly: false },
   { name: "Project Mapping", href: "/project-mapping", icon: FolderOpen, adminOnly: false },
+  { name: "Create from Bin", href: "/create-from-bin", icon: Upload, adminOnly: false },
   { name: "User Activity", href: "/admin/activity", icon: Settings, adminOnly: true },
 ];
 
