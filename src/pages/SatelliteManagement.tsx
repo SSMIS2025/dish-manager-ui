@@ -77,7 +77,9 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [editingSatellite, setEditingSatellite] = useState<SatelliteData | null>(null);
   const [formData, setFormData] = useState<Partial<SatelliteData>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingEquipment, setIsSavingEquipment] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   
   // Filter states
@@ -85,6 +87,11 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [carrierFilter, setCarrierFilter] = useState("");
   const [serviceFilter, setServiceFilter] = useState("");
   const [polarizationFilter, setPolarizationFilter] = useState("all");
+  
+  // Pagination states
+  const [carrierPage, setCarrierPage] = useState(1);
+  const [servicePage, setServicePage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   
   // Equipment lists for mapping
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
@@ -121,7 +128,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     sat.position.toLowerCase().includes(satelliteFilter.toLowerCase())
   );
 
-  // Filtered carriers
+  // Filtered carriers with pagination
   const getFilteredCarriers = () => {
     if (!selectedSatellite) return [];
     return selectedSatellite.carriers.filter(carrier => {
@@ -132,13 +139,33 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     });
   };
 
-  // Filtered services
+  const getPaginatedCarriers = () => {
+    const filtered = getFilteredCarriers();
+    const startIndex = (carrierPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  };
+
+  const getTotalCarrierPages = () => {
+    return Math.ceil(getFilteredCarriers().length / ITEMS_PER_PAGE);
+  };
+
+  // Filtered services with pagination
   const getFilteredServices = () => {
     if (!selectedCarrier) return [];
     return (selectedCarrier.services || []).filter(service =>
       service.name.toLowerCase().includes(serviceFilter.toLowerCase()) ||
       (service.frequency && service.frequency.toLowerCase().includes(serviceFilter.toLowerCase()))
     );
+  };
+
+  const getPaginatedServices = () => {
+    const filtered = getFilteredServices();
+    const startIndex = (servicePage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  };
+
+  const getTotalServicePages = () => {
+    return Math.ceil(getFilteredServices().length / ITEMS_PER_PAGE);
   };
 
   const loadSatellites = async () => {
@@ -164,16 +191,21 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   };
 
   const loadEquipment = async () => {
-    const [lnbs, switches, motors, unicables] = await Promise.all([
-      apiService.getEquipment('lnbs'),
-      apiService.getEquipment('switches'),
-      apiService.getEquipment('motors'),
-      apiService.getEquipment('unicables')
-    ]);
-    setAllLnbs(lnbs);
-    setAllSwitches(switches);
-    setAllMotors(motors);
-    setAllUnicables(unicables);
+    setIsLoadingEquipment(true);
+    try {
+      const [lnbs, switches, motors, unicables] = await Promise.all([
+        apiService.getEquipment('lnbs'),
+        apiService.getEquipment('switches'),
+        apiService.getEquipment('motors'),
+        apiService.getEquipment('unicables')
+      ]);
+      setAllLnbs(lnbs);
+      setAllSwitches(switches);
+      setAllMotors(motors);
+      setAllUnicables(unicables);
+    } finally {
+      setIsLoadingEquipment(false);
+    }
   };
 
   const handleAdd = () => {
@@ -301,6 +333,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const handleSelectSatellite = (satellite: SatelliteData) => {
     setSelectedSatellite(satellite);
     setSelectedCarrier(null);
+    setCarrierPage(1);
+    setServicePage(1);
   };
 
   // Carrier management
@@ -453,7 +487,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const handleSaveEquipment = async () => {
     if (!selectedSatellite) return;
 
-    setIsSaving(true);
+    setIsSavingEquipment(true);
     try {
       const updatedSatellite = {
         ...selectedSatellite,
@@ -468,7 +502,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       setIsEquipmentDialogOpen(false);
       toast({ title: "Equipment Updated", description: "Equipment mappings have been saved." });
     } finally {
-      setIsSaving(false);
+      setIsSavingEquipment(false);
     }
   };
 
@@ -694,12 +728,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {getFilteredCarriers().length === 0 ? (
+                            {getPaginatedCarriers().length === 0 ? (
                               <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No carriers found.</TableCell></TableRow>
                             ) : (
-                              getFilteredCarriers().map((carrier, index) => (
+                              getPaginatedCarriers().map((carrier, index) => (
                                 <TableRow key={carrier.id} className="hover:bg-muted/30">
-                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell>{(carrierPage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
                                   <TableCell className="font-medium">{carrier.name}</TableCell>
                                   <TableCell>{carrier.frequency}</TableCell>
                                   <TableCell>{carrier.polarization}</TableCell>
@@ -718,6 +752,33 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                           </TableBody>
                         </Table>
                       </div>
+                      {/* Carrier Pagination */}
+                      {getTotalCarrierPages() > 1 && (
+                        <div className="flex items-center justify-between mt-4 px-2">
+                          <p className="text-sm text-muted-foreground">
+                            Showing {(carrierPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(carrierPage * ITEMS_PER_PAGE, getFilteredCarriers().length)} of {getFilteredCarriers().length} carriers
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setCarrierPage(p => Math.max(1, p - 1))}
+                              disabled={carrierPage === 1}
+                            >
+                              Previous
+                            </Button>
+                            <span className="text-sm">Page {carrierPage} of {getTotalCarrierPages()}</span>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setCarrierPage(p => Math.min(getTotalCarrierPages(), p + 1))}
+                              disabled={carrierPage >= getTotalCarrierPages()}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </TabsContent>
 
                     <TabsContent value="services">
