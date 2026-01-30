@@ -4,6 +4,23 @@
 CREATE DATABASE IF NOT EXISTS sdb_database;
 USE sdb_database;
 
+-- Users table for authentication
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(50) PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    is_admin TINYINT(1) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Insert default users
+INSERT INTO users (id, username, password, is_admin) VALUES 
+('admin-001', 'admin', 'admin123', 1),
+('user-001', 'user', 'user123', 0),
+('operator-001', 'operator', 'op123', 0)
+ON DUPLICATE KEY UPDATE username = username;
+
 -- Projects table
 CREATE TABLE IF NOT EXISTS projects (
     id VARCHAR(50) PRIMARY KEY,
@@ -19,13 +36,14 @@ CREATE TABLE IF NOT EXISTS lnbs (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100),
-    frequency VARCHAR(100),
-    polarization VARCHAR(50),
-    skew VARCHAR(50),
-    band VARCHAR(50),
-    noise_figure VARCHAR(50),
-    local_oscillator VARCHAR(100),
-    gain VARCHAR(50),
+    lnb_type VARCHAR(100),
+    band_type VARCHAR(100),
+    power_control VARCHAR(100),
+    v_control VARCHAR(100),
+    repeat_mode VARCHAR(100),
+    khz_option VARCHAR(100),
+    low_frequency VARCHAR(100),
+    high_frequency VARCHAR(100),
     test_result VARCHAR(50) DEFAULT 'Not Tested',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -36,12 +54,8 @@ CREATE TABLE IF NOT EXISTS switches (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100),
-    ports INT DEFAULT 2,
-    frequency VARCHAR(100),
-    isolation VARCHAR(50),
-    insertion_loss VARCHAR(50),
-    protocol VARCHAR(50),
-    power_consumption VARCHAR(50),
+    switch_type VARCHAR(100),
+    switch_configuration VARCHAR(100),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -52,6 +66,10 @@ CREATE TABLE IF NOT EXISTS motors (
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100),
     position VARCHAR(50),
+    longitude VARCHAR(50),
+    latitude VARCHAR(50),
+    east_west VARCHAR(20),
+    north_south VARCHAR(20),
     status VARCHAR(50) DEFAULT 'Positioned',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -62,11 +80,8 @@ CREATE TABLE IF NOT EXISTS unicables (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100),
-    user_bands INT DEFAULT 1,
-    frequency VARCHAR(100),
-    protocol VARCHAR(50),
-    power_consumption VARCHAR(50),
-    compatibility VARCHAR(255),
+    status VARCHAR(50),
+    port VARCHAR(50),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -142,6 +157,6 @@ CREATE TABLE IF NOT EXISTS activities (
 );
 
 -- Insert default project
-INSERT INTO projects (id, name, description, created_by) 
-VALUES ('default-project', 'Default Project', 'Default satellite equipment project', 'admin')
+INSERT INTO projects (id, name, description, created_by, created_at, updated_at) 
+VALUES ('default-project', 'Default Project', 'Default satellite equipment project', 'admin', NOW(), NOW())
 ON DUPLICATE KEY UPDATE name = name;

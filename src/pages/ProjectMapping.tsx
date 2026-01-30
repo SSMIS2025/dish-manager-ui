@@ -5,15 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
-  Plus, FolderOpen, Edit, Trash2, Download, Radio, Zap, RotateCcw, Activity, Satellite, Check, Loader2, FileCode 
+  Plus, FolderOpen, Edit, Trash2, Download, Radio, Zap, RotateCcw, Activity, Satellite, Check, Loader2, FileCode, FileSpreadsheet, FileText 
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
+import { exportService } from "@/services/exportService";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,11 +39,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBinDialogOpen, setIsBinDialogOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [formData, setFormData] = useState<{ name: string; description: string }>({ name: '', description: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
+  const [isLoadingMappings, setIsLoadingMappings] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingBin, setIsGeneratingBin] = useState(false);
+  const [savingMappingId, setSavingMappingId] = useState<string | null>(null);
   
   // Equipment lists
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
@@ -83,23 +89,33 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   };
 
   const loadEquipment = async () => {
-    const [lnbs, switches, motors, unicables, satellites] = await Promise.all([
-      apiService.getEquipment('lnbs'),
-      apiService.getEquipment('switches'),
-      apiService.getEquipment('motors'),
-      apiService.getEquipment('unicables'),
-      apiService.getSatellites()
-    ]);
-    setAllLnbs(lnbs);
-    setAllSwitches(switches);
-    setAllMotors(motors);
-    setAllUnicables(unicables);
-    setAllSatellites(satellites);
+    setIsLoadingEquipment(true);
+    try {
+      const [lnbs, switches, motors, unicables, satellites] = await Promise.all([
+        apiService.getEquipment('lnbs'),
+        apiService.getEquipment('switches'),
+        apiService.getEquipment('motors'),
+        apiService.getEquipment('unicables'),
+        apiService.getSatellites()
+      ]);
+      setAllLnbs(lnbs);
+      setAllSwitches(switches);
+      setAllMotors(motors);
+      setAllUnicables(unicables);
+      setAllSatellites(satellites);
+    } finally {
+      setIsLoadingEquipment(false);
+    }
   };
 
   const loadProjectMappings = async (projectId: string) => {
-    const mappings = await apiService.getProjectMappings(projectId);
-    setProjectMappings(mappings);
+    setIsLoadingMappings(true);
+    try {
+      const mappings = await apiService.getProjectMappings(projectId);
+      setProjectMappings(mappings);
+    } finally {
+      setIsLoadingMappings(false);
+    }
   };
 
   const handleAddProject = () => {
@@ -187,7 +203,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const handleToggleMapping = async (equipmentType: string, equipmentId: string) => {
     if (!selectedProject) return;
 
-    setIsSaving(true);
+    setSavingMappingId(`${equipmentType}-${equipmentId}`);
     try {
       const existingMapping = projectMappings.find(
         m => m.equipmentType === equipmentType && m.equipmentId === equipmentId
@@ -214,7 +230,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
       loadProjectMappings(selectedProject.id);
     } finally {
-      setIsSaving(false);
+      setSavingMappingId(null);
     }
   };
 
@@ -344,10 +360,23 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       const result = await apiService.generateBin(selectedProject.id, xmlData);
       
       if (result.success && result.binPath) {
-        // In a real implementation, this would trigger a download
-        toast({ title: "Bin Generated", description: `Bin file created at: ${result.binPath}` });
-        
-        // Simulate download
+        // Try to download the bin file
+        const blob = await apiService.downloadBin(selectedProject.id);
+        if (blob) {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${selectedProject.name.replace(/\s+/g, '_')}.bin`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          toast({ title: "Bin Generated", description: "Bin file downloaded successfully." });
+        } else {
+          toast({ title: "Bin Generated", description: `Bin file created at: ${result.binPath}` });
+        }
+      } else {
+        // Download XML as fallback
         const blob = new Blob([xmlData], { type: 'application/xml' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -357,17 +386,40 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-      } else {
+        
         toast({ 
-          title: "Bin Generation", 
-          description: result.error || "Bin generation requires MySQL backend mode.",
-          variant: "destructive"
+          title: "XML Downloaded", 
+          description: result.error || "Bin generation requires backend server. XML downloaded instead."
         });
       }
     } finally {
       setIsGeneratingBin(false);
       setIsBinDialogOpen(false);
     }
+  };
+
+  const handleExportPDF = () => {
+    if (!selectedProject) return;
+    
+    exportService.exportToPDF(
+      { ...selectedProject, lnbs: [], switches: [], motors: [], unicables: [], satellites: [] },
+      projectMappings,
+      { lnbs: allLnbs, switches: allSwitches, motors: allMotors, unicables: allUnicables, satellites: allSatellites }
+    );
+    setIsExportDialogOpen(false);
+    toast({ title: "Export Complete", description: "PDF export opened in new window for printing." });
+  };
+
+  const handleExportExcel = () => {
+    if (!selectedProject) return;
+    
+    exportService.exportToExcel(
+      { ...selectedProject, lnbs: [], switches: [], motors: [], unicables: [], satellites: [] },
+      projectMappings,
+      { lnbs: allLnbs, switches: allSwitches, motors: allMotors, unicables: allUnicables, satellites: allSatellites }
+    );
+    setIsExportDialogOpen(false);
+    toast({ title: "Export Complete", description: "Excel file downloaded." });
   };
 
   const isMapped = (equipmentType: string, equipmentId: string) => {
@@ -406,6 +458,13 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         <div className="flex gap-2">
           {selectedProject && (
             <>
+              <Button 
+                variant="outline"
+                onClick={() => setIsExportDialogOpen(true)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
               <Button 
                 variant="outline"
                 onClick={() => setIsBinDialogOpen(true)}
@@ -506,7 +565,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                         <div className="min-w-0 flex-1">
                           <h4 className="font-medium truncate">{project.name}</h4>
                           <p className="text-sm text-muted-foreground line-clamp-1">{project.description}</p>
-                          <p className="text-xs text-muted-foreground mt-1">By {project.createdBy}</p>
+                          <p className="text-xs text-muted-foreground mt-1">By {project.createdBy || project.created_by}</p>
                         </div>
                         <div className="flex gap-1 ml-2">
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEditProject(project); }}>
@@ -541,6 +600,11 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
                   <p>Select a project to manage equipment mappings</p>
                 </div>
+              ) : isLoadingEquipment || isLoadingMappings ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-3 text-muted-foreground">Loading equipment...</span>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-6">
@@ -548,7 +612,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                       <h3 className="text-xl font-semibold">{selectedProject.name}</h3>
                       <p className="text-sm text-muted-foreground">{selectedProject.description}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {equipmentTypes.map(({ key, label }) => (
                         <Badge key={key} variant="secondary">
                           {label}: {getMappingCount(key)}
@@ -572,7 +636,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                         <Card>
                           <CardHeader className="py-3 bg-primary/5">
                             <CardTitle className="text-sm">
-                              Select {label} to map to this project
+                              Select {label} to map to this project (click checkbox to toggle)
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="p-4">
@@ -584,30 +648,41 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {items.map((item) => {
                                   const mapped = isMapped(key, item.id);
+                                  const isSavingThis = savingMappingId === `${key}-${item.id}`;
                                   return (
                                     <div
                                       key={item.id}
-                                      onClick={() => handleToggleMapping(key, item.id)}
+                                      onClick={() => !isSavingThis && handleToggleMapping(key, item.id)}
                                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                                         mapped 
                                           ? 'border-primary bg-primary/5' 
                                           : 'border-muted hover:border-primary/30'
-                                      }`}
+                                      } ${isSavingThis ? 'opacity-70 pointer-events-none' : ''}`}
                                     >
-                                      <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="shrink-0">
+                                          {isSavingThis ? (
+                                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                          ) : (
+                                            <Checkbox 
+                                              checked={mapped}
+                                              className="h-5 w-5"
+                                              onClick={(e) => e.stopPropagation()}
+                                              onCheckedChange={() => handleToggleMapping(key, item.id)}
+                                            />
+                                          )}
+                                        </div>
                                         <div className="min-w-0 flex-1">
                                           <h5 className="font-medium truncate">{item.name}</h5>
                                           <p className="text-sm text-muted-foreground truncate">
-                                            {item.type || item.position || item.lnbType || ''}
+                                            {item.type || item.position || item.lnbType || item.switchType || ''}
                                           </p>
                                         </div>
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ml-2 ${
-                                          mapped 
-                                            ? 'bg-primary text-primary-foreground' 
-                                            : 'bg-muted'
-                                        }`}>
-                                          {mapped ? <Check className="h-4 w-4" /> : null}
-                                        </div>
+                                        {mapped && !isSavingThis && (
+                                          <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+                                            <Check className="h-4 w-4" />
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   );
@@ -655,6 +730,45 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleImportMappings} disabled={isSaving}>
               {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importing...</> : "Import"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5 text-primary" />
+              Export Project Data
+            </DialogTitle>
+            <DialogDescription>
+              Choose export format for project "{selectedProject?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <Button 
+              variant="outline" 
+              className="w-full h-16 justify-start gap-4"
+              onClick={handleExportPDF}
+            >
+              <FileText className="h-8 w-8 text-red-500" />
+              <div className="text-left">
+                <p className="font-medium">Export as PDF</p>
+                <p className="text-sm text-muted-foreground">Opens print dialog for PDF save</p>
+              </div>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full h-16 justify-start gap-4"
+              onClick={handleExportExcel}
+            >
+              <FileSpreadsheet className="h-8 w-8 text-green-500" />
+              <div className="text-left">
+                <p className="font-medium">Export as Excel (CSV)</p>
+                <p className="text-sm text-muted-foreground">Downloads spreadsheet file</p>
+              </div>
             </Button>
           </div>
         </DialogContent>
@@ -708,6 +822,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               onClick={handleDeleteProject}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
