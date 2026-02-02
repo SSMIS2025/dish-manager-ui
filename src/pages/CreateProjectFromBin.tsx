@@ -85,9 +85,9 @@ const CreateProjectFromBin = ({ username }: CreateProjectFromBinProps) => {
         const base64 = (reader.result as string).split(',')[1];
         const result = await apiService.importBin(base64);
         
-        if (result.success && result.xmlData) {
+        if (result.success && result.data) {
           // Parse XML data
-          const parsed = parseXMLToProjectData(result.xmlData);
+          const parsed = parseXMLToProjectData(result.data);
           setParsedData(parsed);
           setProjectName(parsed.name || file.name.replace('.bin', ''));
           setProjectDescription(parsed.description || "");
