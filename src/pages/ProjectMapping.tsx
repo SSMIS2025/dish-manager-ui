@@ -210,14 +210,10 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       );
 
       if (existingMapping) {
-        await apiService.deleteProjectMapping(selectedProject.id, equipmentType, equipmentId);
+        await apiService.removeProjectMapping(selectedProject.id, equipmentType, equipmentId);
         toast({ title: "Mapping Removed", description: "Equipment removed from project." });
       } else {
-        await apiService.saveProjectMapping({
-          projectId: selectedProject.id,
-          equipmentType,
-          equipmentId
-        });
+        await apiService.addProjectMapping(selectedProject.id, equipmentType, equipmentId);
         toast({ title: "Mapping Added", description: "Equipment added to project." });
       }
 
@@ -246,7 +242,11 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
     setIsSaving(true);
     try {
-      await apiService.importProjectMappings(importSourceProject, selectedProject.id);
+      // Get source project mappings and copy them
+      const sourceMappings = await apiService.getProjectMappings(importSourceProject);
+      for (const mapping of sourceMappings) {
+        await apiService.addProjectMapping(selectedProject.id, mapping.equipmentType, mapping.equipmentId);
+      }
       await apiService.logActivity(username, "Mappings Imported", `Imported mappings from another project`, selectedProject.id);
       
       loadProjectMappings(selectedProject.id);
@@ -357,24 +357,25 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setIsGeneratingBin(true);
     try {
       const xmlData = generateProjectXML();
-      const result = await apiService.generateBin(selectedProject.id, xmlData);
+      const result = await apiService.generateBin(xmlData);
       
-      if (result.success && result.binPath) {
-        // Try to download the bin file
-        const blob = await apiService.downloadBin(selectedProject.id);
-        if (blob) {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${selectedProject.name.replace(/\s+/g, '_')}.bin`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-          toast({ title: "Bin Generated", description: "Bin file downloaded successfully." });
-        } else {
-          toast({ title: "Bin Generated", description: `Bin file created at: ${result.binPath}` });
+      if (result.success && result.data) {
+        // Convert base64 to blob and download
+        const binaryString = atob(result.data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
         }
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedProject.name.replace(/\s+/g, '_')}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast({ title: "Bin Generated", description: "Bin file downloaded successfully." });
       } else {
         // Download XML as fallback
         const blob = new Blob([xmlData], { type: 'application/xml' });
@@ -387,7 +388,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        toast({ 
+        toast({
           title: "XML Downloaded", 
           description: result.error || "Bin generation requires backend server. XML downloaded instead."
         });
