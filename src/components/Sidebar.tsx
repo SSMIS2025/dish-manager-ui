@@ -10,7 +10,8 @@ import {
   FolderOpen,
   RotateCcw,
   Menu,
-  Upload
+  Upload,
+  Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Unicable Management", href: "/unicable", icon: Activity, adminOnly: false },
   { name: "Satellite", href: "/satellite", icon: Satellite, adminOnly: false },
   { name: "Project Mapping", href: "/project-mapping", icon: FolderOpen, adminOnly: false },
+  { name: "Project Builds", href: "/project-builds", icon: Package, adminOnly: false },
   { name: "Create from Bin", href: "/create-from-bin", icon: Upload, adminOnly: false },
   { name: "User Activity", href: "/admin/activity", icon: Settings, adminOnly: true },
 ];

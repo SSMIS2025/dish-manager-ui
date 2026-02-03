@@ -15,6 +15,7 @@ import MotorManagement from "./pages/MotorManagement";
 import UnicableManagement from "./pages/UnicableManagement";
 import SatelliteManagement from "./pages/SatelliteManagement";
 import ProjectMapping from "./pages/ProjectMapping";
+import ProjectBuilds from "./pages/ProjectBuilds";
 import CreateProjectFromBin from "./pages/CreateProjectFromBin";
 import AdminActivity from "./pages/AdminActivity";
 import NotFound from "./pages/NotFound";
@@ -179,6 +180,7 @@ const App = () => {
                   <Route path="/unicable" element={<UnicableManagement username={user.username} />} />
                   <Route path="/satellite" element={<SatelliteManagement username={user.username} />} />
                   <Route path="/project-mapping" element={<ProjectMapping username={user.username} />} />
+                  <Route path="/project-builds" element={<ProjectBuilds />} />
                   <Route path="/create-from-bin" element={<CreateProjectFromBin username={user.username} />} />
                   {user.isAdmin && (
                     <Route path="/admin/activity" element={<AdminActivity />} />

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { storageService } from "@/services/storageService";
+import { apiService } from "@/services/apiService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, User, Activity, Filter } from "lucide-react";
+import { Clock, User, Activity, Filter, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ const AdminActivity = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [filteredActivities, setFilteredActivities] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   
@@ -28,12 +29,21 @@ const AdminActivity = () => {
     applyFilters();
   }, [activities, usernameFilter, actionFilter, projectFilter]);
 
-  const loadData = () => {
-    const allActivities = storageService.getActivities();
-    const allProjects = storageService.getProjects();
-    
-    setActivities(allActivities);
-    setProjects(allProjects);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [activitiesData, projectsData] = await Promise.all([
+        apiService.getActivities(),
+        apiService.getProjects()
+      ]);
+      
+      setActivities(activitiesData);
+      setProjects(projectsData);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const applyFilters = () => {
@@ -88,6 +98,15 @@ const AdminActivity = () => {
   const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedActivities = filteredActivities.slice(startIndex, startIndex + itemsPerPage);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading activities...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -233,20 +252,20 @@ const AdminActivity = () => {
               <div className="text-sm text-muted-foreground">Total Activities</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-green-600">
-                {activities.filter(a => a.action.includes("Added") || a.action.includes("Created")).length}
+              <div className="text-2xl font-bold text-accent">
+                {activities.filter(a => a.action?.includes("Added") || a.action?.includes("Created")).length}
               </div>
               <div className="text-sm text-muted-foreground">Items Created</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-orange-600">
-                {activities.filter(a => a.action.includes("Updated")).length}
+              <div className="text-2xl font-bold text-secondary-foreground">
+                {activities.filter(a => a.action?.includes("Updated")).length}
               </div>
               <div className="text-sm text-muted-foreground">Items Updated</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-red-600">
-                {activities.filter(a => a.action.includes("Deleted")).length}
+              <div className="text-2xl font-bold text-destructive">
+                {activities.filter(a => a.action?.includes("Deleted")).length}
               </div>
               <div className="text-sm text-muted-foreground">Items Deleted</div>
             </div>

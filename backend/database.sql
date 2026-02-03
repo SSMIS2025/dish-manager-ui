@@ -144,6 +144,31 @@ CREATE TABLE IF NOT EXISTS project_mappings (
     UNIQUE KEY unique_mapping (project_id, equipment_type, equipment_id)
 );
 
+-- Project Builds table (one project can have multiple builds)
+CREATE TABLE IF NOT EXISTS project_builds (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    xml_data LONGTEXT,
+    created_by VARCHAR(100),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    INDEX idx_project (project_id)
+);
+
+-- Build Equipment Mappings table (maps equipment to specific builds)
+CREATE TABLE IF NOT EXISTS build_mappings (
+    id VARCHAR(50) PRIMARY KEY,
+    build_id VARCHAR(50) NOT NULL,
+    equipment_type VARCHAR(50) NOT NULL,
+    equipment_id VARCHAR(50) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (build_id) REFERENCES project_builds(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_build_mapping (build_id, equipment_type, equipment_id)
+);
+
 -- Activities/History table
 CREATE TABLE IF NOT EXISTS activities (
     id VARCHAR(50) PRIMARY KEY,
