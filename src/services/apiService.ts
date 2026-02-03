@@ -29,6 +29,18 @@ interface ElectronDatabaseAPI {
   getProjectMappings: (projectId: string) => Promise<ApiResponse<any[]>>;
   createProjectMapping: (data: any) => Promise<ApiResponse<void>>;
   deleteProjectMapping: (projectId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
+  // Project Builds
+  getProjectBuilds: (projectId: string) => Promise<ApiResponse<any[]>>;
+  createProjectBuild: (data: any) => Promise<ApiResponse<any>>;
+  updateProjectBuild: (id: string, data: any) => Promise<ApiResponse<any>>;
+  deleteProjectBuild: (id: string) => Promise<ApiResponse<void>>;
+  // Build Mappings
+  getBuildMappings: (buildId: string) => Promise<ApiResponse<any[]>>;
+  createBuildMapping: (data: any) => Promise<ApiResponse<void>>;
+  deleteBuildMapping: (buildId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
+  // Activities
+  getActivities: () => Promise<ApiResponse<UserActivity[]>>;
+  createActivity: (data: any) => Promise<ApiResponse<void>>;
 }
 
 interface ElectronAuthAPI {
@@ -38,6 +50,9 @@ interface ElectronAuthAPI {
 interface ElectronBinAPI {
   generate: (xmlData: string) => Promise<ApiResponse<string>>;
   import: (binData: string) => Promise<ApiResponse<string>>;
+  checkExecutables: () => Promise<{ generator: boolean; parser: boolean }>;
+  getExecutablePaths: () => Promise<{ generator: string; parser: string }>;
+  setExecutablePaths: (generatorPath: string, parserPath: string) => Promise<ApiResponse<void>>;
 }
 
 interface ElectronFileAPI {
@@ -45,6 +60,7 @@ interface ElectronFileAPI {
   openFile: (filters?: any[]) => Promise<ApiResponse<{ data: string; filename: string }>>;
   exportPdf: (data: string) => Promise<ApiResponse<{ filePath: string }>>;
   exportExcel: (data: string) => Promise<ApiResponse<{ filePath: string }>>;
+  browseExecutable: () => Promise<ApiResponse<{ path: string }>>;
 }
 
 interface ElectronAPI {
@@ -54,7 +70,7 @@ interface ElectronAPI {
   file: ElectronFileAPI;
   app: {
     getVersion: () => Promise<string>;
-    getPlatform: () => string;
+    getPlatform: () => Promise<string>;
   };
 }
 
@@ -681,6 +697,18 @@ class ApiService {
     if (this.currentMode === 'local') {
       return storageService.getActivities();
     }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.getActivities();
+          return result.data || [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
     const result = await this.fetch<UserActivity[]>('/activities');
     return result.data || [];
   }
@@ -690,10 +718,212 @@ class ApiService {
       storageService.logActivity(username, action, details, projectId);
       return;
     }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          await electron.database.createActivity({ username, action, details, projectId });
+        } catch (error) {
+          console.error('Failed to log activity:', error);
+        }
+      }
+      return;
+    }
     await this.fetch('/activities', {
       method: 'POST',
       body: JSON.stringify({ username, action, details, projectId }),
     });
+  }
+
+  // Project Builds
+  async getProjectBuilds(projectId: string): Promise<any[]> {
+    if (this.currentMode === 'local') {
+      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
+      return builds.filter((b: any) => b.projectId === projectId);
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.getProjectBuilds(projectId);
+          return result.data || [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+    const result = await this.fetch<any[]>(`/builds/project/${projectId}`);
+    return result.data || [];
+  }
+
+  async createProjectBuild(data: { projectId: string; name: string; description?: string; xmlData?: string; createdBy?: string }): Promise<any | null> {
+    if (this.currentMode === 'local') {
+      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
+      const newBuild = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        ...data,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      builds.push(newBuild);
+      localStorage.setItem('sdb_project_builds', JSON.stringify(builds));
+      return newBuild;
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.createProjectBuild(data);
+          return result.data || null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+    const result = await this.fetch<any>('/builds', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return result.data || null;
+  }
+
+  async updateProjectBuild(id: string, data: any): Promise<any | null> {
+    if (this.currentMode === 'local') {
+      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
+      const index = builds.findIndex((b: any) => b.id === id);
+      if (index === -1) return null;
+      builds[index] = { ...builds[index], ...data, updatedAt: new Date().toISOString() };
+      localStorage.setItem('sdb_project_builds', JSON.stringify(builds));
+      return builds[index];
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.updateProjectBuild(id, data);
+          return result.data || null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+    const result = await this.fetch<any>(`/builds/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return result.data || null;
+  }
+
+  async deleteProjectBuild(id: string): Promise<boolean> {
+    if (this.currentMode === 'local') {
+      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
+      const filtered = builds.filter((b: any) => b.id !== id);
+      localStorage.setItem('sdb_project_builds', JSON.stringify(filtered));
+      return true;
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.deleteProjectBuild(id);
+          return result.success;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }
+    const result = await this.fetch(`/builds/${id}`, { method: 'DELETE' });
+    return result.success;
+  }
+
+  // Build Mappings
+  async getBuildMappings(buildId: string): Promise<any[]> {
+    if (this.currentMode === 'local') {
+      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
+      return mappings.filter((m: any) => m.buildId === buildId);
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.getBuildMappings(buildId);
+          return result.data || [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+    const result = await this.fetch<any[]>(`/builds/${buildId}/mappings`);
+    return result.data || [];
+  }
+
+  async addBuildMapping(buildId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
+    if (this.currentMode === 'local') {
+      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
+      const exists = mappings.some((m: any) => 
+        m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId
+      );
+      if (!exists) {
+        mappings.push({
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          buildId,
+          equipmentType,
+          equipmentId,
+          createdAt: new Date().toISOString()
+        });
+        localStorage.setItem('sdb_build_mappings', JSON.stringify(mappings));
+      }
+      return true;
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.createBuildMapping({ buildId, equipmentType, equipmentId });
+          return result.success;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }
+    const result = await this.fetch(`/builds/${buildId}/mappings`, {
+      method: 'POST',
+      body: JSON.stringify({ equipmentType, equipmentId }),
+    });
+    return result.success;
+  }
+
+  async removeBuildMapping(buildId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
+    if (this.currentMode === 'local') {
+      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
+      const filtered = mappings.filter((m: any) => 
+        !(m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId)
+      );
+      localStorage.setItem('sdb_build_mappings', JSON.stringify(filtered));
+      return true;
+    }
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const result = await electron.database.deleteBuildMapping(buildId, equipmentType, equipmentId);
+          return result.success;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }
+    const result = await this.fetch(`/builds/${buildId}/mappings/${equipmentType}/${equipmentId}`, {
+      method: 'DELETE',
+    });
+    return result.success;
   }
 }
 

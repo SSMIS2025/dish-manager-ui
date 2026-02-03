@@ -10,6 +10,8 @@ const equipmentRoutes = require('./routes/equipment');
 const satelliteRoutes = require('./routes/satellites');
 const mappingRoutes = require('./routes/mappings');
 const binRoutes = require('./routes/bin');
+const buildRoutes = require('./routes/builds');
+const activityRoutes = require('./routes/activities');
 
 const app = express();
 app.use(cors());
@@ -30,6 +32,8 @@ app.use('/api/equipment', equipmentRoutes(pool, asyncHandler, generateId, getMyS
 app.use('/api/satellites', satelliteRoutes(pool, asyncHandler, generateId, getMySQLDateTime));
 app.use('/api/project-mappings', mappingRoutes(pool, asyncHandler, generateId, getMySQLDateTime));
 app.use('/api/bin', binRoutes(pool, asyncHandler, generateId, getMySQLDateTime));
+app.use('/api/builds', buildRoutes(pool, asyncHandler, generateId, getMySQLDateTime));
+app.use('/api/activities', activityRoutes(pool, asyncHandler, generateId, getMySQLDateTime));
 
 // Start server
 const PORT = config.server.port || 3001;
