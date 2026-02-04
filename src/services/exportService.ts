@@ -1,14 +1,15 @@
 // Export Service for PDF and Excel generation
 
 interface ProjectData {
+  id?: string;
   name: string;
   description?: string;
   createdBy?: string;
-  lnbs: any[];
-  switches: any[];
-  motors: any[];
-  unicables: any[];
-  satellites: any[];
+  lnbs?: any[];
+  switches?: any[];
+  motors?: any[];
+  unicables?: any[];
+  satellites?: any[];
 }
 
 class ExportService {
