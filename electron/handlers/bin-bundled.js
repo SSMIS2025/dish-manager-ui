@@ -1,4 +1,4 @@
-const { exec, execFile } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -6,6 +6,7 @@ const os = require('os');
 class BundledBinHandler {
   constructor(config = {}) {
     this.tempDir = os.tmpdir();
+    this.platform = process.platform; // 'win32', 'linux', 'darwin'
     
     // Configurable paths for bin executables
     // Can be bundled with app or external
@@ -16,34 +17,84 @@ class BundledBinHandler {
     };
   }
 
-  // Find executable in various locations
-  findExecutable(name) {
-    const possiblePaths = [
-      // Bundled with app (production)
-      path.join(process.resourcesPath || '', 'bin', `${name}.out`),
-      path.join(process.resourcesPath || '', 'bin', name),
-      path.join(__dirname, '../../bin', `${name}.out`),
-      path.join(__dirname, '../../bin', name),
-      // Development paths
-      path.join(__dirname, '../../../bin', `${name}.out`),
-      path.join(__dirname, '../../../bin', name),
-      // System paths
-      `/var/www/html/${name}.out`,
-      `/usr/local/bin/${name}`,
-      `/usr/bin/${name}`,
-      // Windows paths
-      path.join(process.env.APPDATA || '', 'sdb-tool', 'bin', `${name}.exe`),
-      `C:\\Program Files\\SDB Tool\\bin\\${name}.exe`
-    ];
+  // Get OS-specific executable extension
+  getExecutableExtension() {
+    switch (this.platform) {
+      case 'win32':
+        return '.exe';
+      case 'linux':
+      case 'darwin':
+        return '.out';
+      default:
+        return '';
+    }
+  }
 
-    for (const exePath of possiblePaths) {
-      if (fs.existsSync(exePath)) {
-        console.log(`Found ${name} at: ${exePath}`);
-        return exePath;
+  // Get all possible executable names for an app
+  getExecutableNames(baseName) {
+    const ext = this.getExecutableExtension();
+    const names = [];
+    
+    // Add with extension first (more specific)
+    if (ext) {
+      names.push(`${baseName}${ext}`);
+    }
+    
+    // Add without extension as fallback
+    names.push(baseName);
+    
+    // Windows-specific alternatives
+    if (this.platform === 'win32') {
+      names.push(`${baseName}.exe`);
+    }
+    
+    // Linux/Mac alternatives
+    if (this.platform === 'linux' || this.platform === 'darwin') {
+      names.push(`${baseName}.out`);
+      names.push(baseName);
+    }
+    
+    return [...new Set(names)]; // Remove duplicates
+  }
+
+  // Find executable in various locations
+  findExecutable(baseName) {
+    const executableNames = this.getExecutableNames(baseName);
+    
+    // Base paths to search
+    const basePaths = [
+      // Bundled with app (production)
+      process.resourcesPath ? path.join(process.resourcesPath, 'bin') : null,
+      path.join(__dirname, '../../bin'),
+      path.join(__dirname, '../bin'),
+      // Development paths
+      path.join(__dirname, '../../../bin'),
+      // System paths (Linux/Mac)
+      '/var/www/html',
+      '/usr/local/bin',
+      '/usr/bin',
+      '/opt/sdb-tool/bin',
+      // Windows paths
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'sdb-tool', 'bin') : null,
+      'C:\\Program Files\\SDB Tool\\bin',
+      'C:\\Program Files (x86)\\SDB Tool\\bin',
+      // Current directory
+      process.cwd(),
+      path.join(process.cwd(), 'bin')
+    ].filter(Boolean);
+
+    // Search for executable
+    for (const basePath of basePaths) {
+      for (const execName of executableNames) {
+        const fullPath = path.join(basePath, execName);
+        if (fs.existsSync(fullPath)) {
+          console.log(`Found ${baseName} at: ${fullPath}`);
+          return fullPath;
+        }
       }
     }
 
-    console.warn(`Executable ${name} not found in standard locations`);
+    console.warn(`Executable ${baseName} not found in standard locations`);
     return null;
   }
 
@@ -51,13 +102,15 @@ class BundledBinHandler {
   setExecutablePaths(generatorPath, parserPath) {
     if (generatorPath) this.config.binGeneratorPath = generatorPath;
     if (parserPath) this.config.binParserPath = parserPath;
+    return { success: true };
   }
 
   // Get current executable paths
   getExecutablePaths() {
     return {
       generator: this.config.binGeneratorPath,
-      parser: this.config.binParserPath
+      parser: this.config.binParserPath,
+      platform: this.platform
     };
   }
 
@@ -65,7 +118,8 @@ class BundledBinHandler {
   checkExecutables() {
     return {
       generator: this.config.binGeneratorPath && fs.existsSync(this.config.binGeneratorPath),
-      parser: this.config.binParserPath && fs.existsSync(this.config.binParserPath)
+      parser: this.config.binParserPath && fs.existsSync(this.config.binParserPath),
+      platform: this.platform
     };
   }
 
@@ -158,6 +212,15 @@ class BundledBinHandler {
 
   executeCommand(exePath, args) {
     return new Promise((resolve, reject) => {
+      // Make executable on Unix systems
+      if (this.platform !== 'win32') {
+        try {
+          fs.chmodSync(exePath, '755');
+        } catch (e) {
+          console.warn('Could not set executable permissions:', e.message);
+        }
+      }
+
       // Use execFile for better security
       execFile(exePath, args, { timeout: 60000 }, (error, stdout, stderr) => {
         if (error) {

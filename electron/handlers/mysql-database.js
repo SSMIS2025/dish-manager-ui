@@ -17,10 +17,23 @@ class MySQLDatabaseHandler {
   }
 
   loadConfig() {
-    const configPath = path.join(__dirname, '../../backend/config.json');
-    if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const configPaths = [
+      path.join(__dirname, '../../backend/config.json'),
+      path.join(__dirname, '../config.json'),
+      path.join(process.cwd(), 'backend/config.json'),
+      path.join(process.cwd(), 'config.json')
+    ];
+    
+    for (const configPath of configPaths) {
+      if (fs.existsSync(configPath)) {
+        try {
+          return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch (e) {
+          console.error(`Failed to read config from ${configPath}:`, e);
+        }
+      }
     }
+    
     return {
       database: {
         host: 'localhost',
@@ -66,7 +79,7 @@ class MySQLDatabaseHandler {
       const rows = await this.query('SELECT * FROM projects ORDER BY created_at DESC');
       return { success: true, data: this.formatProjects(rows) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -110,7 +123,11 @@ class MySQLDatabaseHandler {
 
   async deleteProject(id) {
     try {
-      // Delete builds first
+      // Delete builds and their mappings first
+      const builds = await this.query('SELECT id FROM project_builds WHERE project_id = ?', [id]);
+      for (const build of builds) {
+        await this.query('DELETE FROM build_mappings WHERE build_id = ?', [build.id]);
+      }
       await this.query('DELETE FROM project_builds WHERE project_id = ?', [id]);
       await this.query('DELETE FROM project_mappings WHERE project_id = ?', [id]);
       await this.query('DELETE FROM projects WHERE id = ?', [id]);
@@ -131,7 +148,7 @@ class MySQLDatabaseHandler {
       const [result] = await this.query(query, params);
       return { success: true, data: { exists: result.count > 0 } };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: { exists: false } };
     }
   }
 
@@ -144,7 +161,7 @@ class MySQLDatabaseHandler {
       );
       return { success: true, data: this.formatBuilds(rows) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -204,7 +221,7 @@ class MySQLDatabaseHandler {
       const rows = await this.query(`SELECT * FROM ${tableName} ORDER BY created_at DESC`);
       return { success: true, data: this.formatEquipment(rows, type) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -267,7 +284,7 @@ class MySQLDatabaseHandler {
       const [result] = await this.query(query, params);
       return { success: true, data: { exists: result.count > 0 } };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: { exists: false } };
     }
   }
 
@@ -286,7 +303,7 @@ class MySQLDatabaseHandler {
       
       return { success: true, data: this.formatSatellites(satellites) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -296,8 +313,8 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'INSERT INTO satellites (id, name, orbital_position, polarization, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, data.name, data.orbitalPosition || '', data.polarization || '', now, now]
+        'INSERT INTO satellites (id, name, position, orbital_position, polarization, direction, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', now, now]
       );
       
       // Create carriers and services
@@ -319,8 +336,8 @@ class MySQLDatabaseHandler {
     const now = getMySQLDateTime();
     
     await this.query(
-      'INSERT INTO carriers (id, satellite_id, name, frequency, symbol_rate, polarization, fec_mode, factory_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || '', data.polarization || '', data.fecMode || '', data.factoryDefault ? 1 : 0, now, now]
+      'INSERT INTO carriers (id, satellite_id, name, frequency, symbol_rate, polarization, fec, fec_mode, factory_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || '', data.polarization || '', data.fec || '', data.fecMode || '', data.factoryDefault ? 1 : 0, now, now]
     );
     
     // Create services
@@ -339,7 +356,7 @@ class MySQLDatabaseHandler {
     
     await this.query(
       'INSERT INTO services (id, carrier_id, name, service_type, service_id_number, video_pid, audio_pid, pcr_pid, scramble, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, carrierId, data.name || '', data.serviceType || '', data.serviceId || '', data.videoPid || '', data.audioPid || '', data.pcrPid || '', data.scramble ? 1 : 0, now, now]
+      [id, carrierId, data.name || '', data.serviceType || '', data.serviceId || data.serviceIdNumber || '', data.videoPid || '', data.audioPid || '', data.pcrPid || '', data.scramble ? 1 : 0, now, now]
     );
     
     return id;
@@ -362,20 +379,18 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'UPDATE satellites SET name = ?, orbital_position = ?, polarization = ?, updated_at = ? WHERE id = ?',
-        [data.name, data.orbitalPosition || '', data.polarization || '', now, id]
+        'UPDATE satellites SET name = ?, position = ?, orbital_position = ?, polarization = ?, direction = ?, updated_at = ? WHERE id = ?',
+        [data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', now, id]
       );
       
       // Update carriers - delete and recreate for simplicity
       if (data.carriers) {
-        // Delete existing carriers and services
         const existingCarriers = await this.query('SELECT id FROM carriers WHERE satellite_id = ?', [id]);
         for (const carrier of existingCarriers) {
           await this.query('DELETE FROM services WHERE carrier_id = ?', [carrier.id]);
         }
         await this.query('DELETE FROM carriers WHERE satellite_id = ?', [id]);
         
-        // Create new carriers
         for (const carrier of data.carriers) {
           await this.createCarrier(id, carrier);
         }
@@ -390,7 +405,6 @@ class MySQLDatabaseHandler {
 
   async deleteSatellite(id) {
     try {
-      // Delete services first
       const carriers = await this.query('SELECT id FROM carriers WHERE satellite_id = ?', [id]);
       for (const carrier of carriers) {
         await this.query('DELETE FROM services WHERE carrier_id = ?', [carrier.id]);
@@ -416,7 +430,7 @@ class MySQLDatabaseHandler {
       const [result] = await this.query(query, params);
       return { success: true, data: { exists: result.count > 0 } };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: { exists: false } };
     }
   }
 
@@ -426,13 +440,12 @@ class MySQLDatabaseHandler {
       const rows = await this.query('SELECT * FROM project_mappings WHERE project_id = ?', [projectId]);
       return { success: true, data: this.formatMappings(rows) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
   async createProjectMapping(data) {
     try {
-      // Check if exists
       const [existing] = await this.query(
         'SELECT id FROM project_mappings WHERE project_id = ? AND equipment_type = ? AND equipment_id = ?',
         [data.projectId, data.equipmentType, data.equipmentId]
@@ -470,9 +483,9 @@ class MySQLDatabaseHandler {
   async getBuildMappings(buildId) {
     try {
       const rows = await this.query('SELECT * FROM build_mappings WHERE build_id = ?', [buildId]);
-      return { success: true, data: this.formatMappings(rows) };
+      return { success: true, data: this.formatBuildMappings(rows) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -517,7 +530,7 @@ class MySQLDatabaseHandler {
       const rows = await this.query('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 1000');
       return { success: true, data: this.formatActivities(rows) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
 
@@ -565,30 +578,55 @@ class MySQLDatabaseHandler {
   }
 
   getEquipmentInsertData(type, id, data, now) {
-    const baseColumns = ['id', 'name', 'created_at', 'updated_at'];
-    const baseValues = [id, data.name, now, now];
+    const baseColumns = ['id', 'name', 'type', 'created_at', 'updated_at'];
+    const baseValues = [id, data.name || '', data.type || '', now, now];
     
     const typeFields = {
-      lnbs: ['type', 'low_frequency', 'high_frequency'],
-      switches: ['type', 'ports', 'configuration'],
-      motors: ['type', 'position_count', 'direction'],
-      unicables: ['type', 'ports', 'frequencies']
+      lnbs: {
+        columns: ['low_frequency', 'high_frequency', 'band_type', 'power_control', 'lnb_type'],
+        values: [
+          data.lowFrequency || data.low_frequency || '',
+          data.highFrequency || data.high_frequency || '',
+          data.bandType || data.band_type || '',
+          data.powerControl || data.power_control || '',
+          data.lnbType || data.lnb_type || ''
+        ]
+      },
+      switches: {
+        columns: ['ports', 'configuration', 'switch_type', 'switch_configuration'],
+        values: [
+          data.ports || '',
+          data.configuration || '',
+          data.switchType || data.switch_type || '',
+          data.switchConfiguration || data.switch_configuration || ''
+        ]
+      },
+      motors: {
+        columns: ['position', 'position_count', 'direction', 'longitude', 'latitude', 'status'],
+        values: [
+          data.position || '',
+          data.positionCount || data.position_count || '',
+          data.direction || '',
+          data.longitude || '',
+          data.latitude || '',
+          data.status || 'Positioned'
+        ]
+      },
+      unicables: {
+        columns: ['ports', 'frequencies', 'port', 'status'],
+        values: [
+          data.ports || '',
+          data.frequencies || '',
+          data.port || '',
+          data.status || ''
+        ]
+      }
     };
     
-    const fields = typeFields[type] || [];
-    const fieldMap = {
-      type: data.type || '',
-      low_frequency: data.lowFrequency || data.low_frequency || '',
-      high_frequency: data.highFrequency || data.high_frequency || '',
-      ports: data.ports || '',
-      configuration: data.configuration || '',
-      position_count: data.positionCount || data.position_count || '',
-      direction: data.direction || '',
-      frequencies: data.frequencies || ''
-    };
+    const typeConfig = typeFields[type] || { columns: [], values: [] };
     
-    const columns = [...baseColumns, ...fields];
-    const values = [...baseValues, ...fields.map(f => fieldMap[f])];
+    const columns = [...baseColumns, ...typeConfig.columns];
+    const values = [...baseValues, ...typeConfig.values];
     const placeholders = columns.map(() => '?');
     
     return { columns, placeholders, values };
@@ -604,15 +642,19 @@ class MySQLDatabaseHandler {
     const fieldMap = {
       lowFrequency: 'low_frequency',
       highFrequency: 'high_frequency',
-      positionCount: 'position_count'
+      bandType: 'band_type',
+      powerControl: 'power_control',
+      lnbType: 'lnb_type',
+      positionCount: 'position_count',
+      switchType: 'switch_type',
+      switchConfiguration: 'switch_configuration'
     };
     
     Object.keys(data).forEach(key => {
+      if (['id', 'name', 'type', 'createdAt', 'updatedAt', 'created_at', 'updated_at'].includes(key)) return;
       const dbField = fieldMap[key] || key;
-      if (!['id', 'name', 'type', 'createdAt', 'updatedAt'].includes(key)) {
-        updates.push(`${dbField} = ?`);
-        values.push(data[key]);
-      }
+      updates.push(`${dbField} = ?`);
+      values.push(data[key]);
     });
     
     return { updates, values };
@@ -632,7 +674,7 @@ class MySQLDatabaseHandler {
   }
 
   formatProjects(rows) {
-    return rows.map(row => this.formatProject(row));
+    return (rows || []).map(row => this.formatProject(row));
   }
 
   formatBuild(row) {
@@ -650,7 +692,7 @@ class MySQLDatabaseHandler {
   }
 
   formatBuilds(rows) {
-    return rows.map(row => this.formatBuild(row));
+    return (rows || []).map(row => this.formatBuild(row));
   }
 
   formatSingleEquipment(row, type) {
@@ -667,22 +709,33 @@ class MySQLDatabaseHandler {
     if (type === 'lnbs') {
       base.lowFrequency = row.low_frequency;
       base.highFrequency = row.high_frequency;
+      base.bandType = row.band_type;
+      base.powerControl = row.power_control;
+      base.lnbType = row.lnb_type;
     } else if (type === 'switches') {
       base.ports = row.ports;
       base.configuration = row.configuration;
+      base.switchType = row.switch_type;
+      base.switchConfiguration = row.switch_configuration;
     } else if (type === 'motors') {
+      base.position = row.position;
       base.positionCount = row.position_count;
       base.direction = row.direction;
+      base.longitude = row.longitude;
+      base.latitude = row.latitude;
+      base.status = row.status;
     } else if (type === 'unicables') {
       base.ports = row.ports;
       base.frequencies = row.frequencies;
+      base.port = row.port;
+      base.status = row.status;
     }
     
     return base;
   }
 
   formatEquipment(rows, type) {
-    return rows.map(row => this.formatSingleEquipment(row, type));
+    return (rows || []).map(row => this.formatSingleEquipment(row, type));
   }
 
   formatSatellite(row) {
@@ -690,8 +743,10 @@ class MySQLDatabaseHandler {
     return {
       id: row.id,
       name: row.name,
-      orbitalPosition: row.orbital_position,
+      position: row.position,
+      orbitalPosition: row.orbital_position || row.position,
       polarization: row.polarization,
+      direction: row.direction,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       carriers: (row.carriers || []).map(c => ({
@@ -700,6 +755,7 @@ class MySQLDatabaseHandler {
         frequency: c.frequency,
         symbolRate: c.symbol_rate,
         polarization: c.polarization,
+        fec: c.fec,
         fecMode: c.fec_mode,
         factoryDefault: c.factory_default === 1,
         services: (c.services || []).map(s => ({
@@ -717,13 +773,22 @@ class MySQLDatabaseHandler {
   }
 
   formatSatellites(rows) {
-    return rows.map(row => this.formatSatellite(row));
+    return (rows || []).map(row => this.formatSatellite(row));
   }
 
   formatMappings(rows) {
-    return rows.map(row => ({
+    return (rows || []).map(row => ({
       id: row.id,
       projectId: row.project_id,
+      equipmentType: row.equipment_type,
+      equipmentId: row.equipment_id,
+      createdAt: row.created_at
+    }));
+  }
+
+  formatBuildMappings(rows) {
+    return (rows || []).map(row => ({
+      id: row.id,
       buildId: row.build_id,
       equipmentType: row.equipment_type,
       equipmentId: row.equipment_id,
@@ -732,7 +797,7 @@ class MySQLDatabaseHandler {
   }
 
   formatActivities(rows) {
-    return rows.map(row => ({
+    return (rows || []).map(row => ({
       id: row.id,
       username: row.username,
       action: row.action,
