@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Radio, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -14,14 +13,14 @@ import { EquipmentTable } from "@/components/EquipmentTable";
 interface LNBDevice {
   id: string;
   name: string;
-  lnbType: string;
   bandType: string;
-  lnbPowerControl: string;
+  powerControl: string;
   vControl: string;
-  repeatMode: string;
   khzOption: string;
   lowFrequency: string;
   highFrequency: string;
+  lo1High: string;
+  lo1Low: string;
 }
 
 interface LNBManagementProps {
@@ -38,14 +37,10 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
   const [isSaving, setIsSaving] = useState(false);
   
   const nameRef = useRef<HTMLInputElement>(null);
-  const lowFreqRef = useRef<HTMLInputElement>(null);
-  const highFreqRef = useRef<HTMLInputElement>(null);
 
-  const lnbTypes = ["Universal", "Single", "Twin", "Quad", "Octo", "Wideband"];
   const bandTypes = ["C-Band", "Ku-Band", "Ka-Band", "L-Band"];
   const powerControls = ["Auto", "13V", "18V", "Off"];
   const vControls = ["Enabled", "Disabled"];
-  const repeatModes = ["Single", "Continuous", "Off"];
   const khzOptions = ["Auto", "On", "Off"];
 
   useEffect(() => {
@@ -59,14 +54,14 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       const lnbDevices: LNBDevice[] = allDevices.map(device => ({
         id: device.id,
         name: device.name,
-        lnbType: device.lnbType || device.type || "",
         bandType: device.bandType || device.band || "",
-        lnbPowerControl: device.lnbPowerControl || "Auto",
+        powerControl: device.powerControl || "Auto",
         vControl: device.vControl || "Enabled",
-        repeatMode: device.repeatMode || "Single",
         khzOption: device.khzOption || "Auto",
         lowFrequency: device.lowFrequency || "",
-        highFrequency: device.highFrequency || ""
+        highFrequency: device.highFrequency || "",
+        lo1High: device.lo1High || "",
+        lo1Low: device.lo1Low || ""
       }));
       setDevices(lnbDevices);
     } finally {
@@ -114,36 +109,6 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
       nameRef.current?.focus();
       return false;
     }
-
-    if (!formData.lnbType) {
-      toast({
-        title: "Validation Error",
-        description: "LNB Type is required.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.lowFrequency?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Low Frequency is required.",
-        variant: "destructive",
-      });
-      lowFreqRef.current?.focus();
-      return false;
-    }
-
-    if (!formData.highFrequency?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "High Frequency is required.",
-        variant: "destructive",
-      });
-      highFreqRef.current?.focus();
-      return false;
-    }
-
     return true;
   };
 
@@ -166,15 +131,14 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
 
       const deviceData = {
         name: formData.name!,
-        type: formData.lnbType!,
-        lnbType: formData.lnbType!,
         bandType: formData.bandType || "",
-        lnbPowerControl: formData.lnbPowerControl || "Auto",
+        powerControl: formData.powerControl || "Auto",
         vControl: formData.vControl || "Enabled",
-        repeatMode: formData.repeatMode || "Single",
         khzOption: formData.khzOption || "Auto",
-        lowFrequency: formData.lowFrequency!,
-        highFrequency: formData.highFrequency!
+        lowFrequency: formData.lowFrequency || "",
+        highFrequency: formData.highFrequency || "",
+        lo1High: formData.lo1High || "",
+        lo1Low: formData.lo1Low || ""
       };
 
       if (editingDevice) {
@@ -205,11 +169,12 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
 
   const columns = [
     { key: 'name', label: 'Name', sortable: true },
-    { key: 'lnbType', label: 'LNB Type', sortable: true },
     { key: 'bandType', label: 'Band Type', sortable: true },
-    { key: 'lnbPowerControl', label: 'Power Control' },
+    { key: 'powerControl', label: 'Power Control' },
     { key: 'lowFrequency', label: 'Low Freq' },
-    { key: 'highFrequency', label: 'High Freq' }
+    { key: 'highFrequency', label: 'High Freq' },
+    { key: 'lo1High', label: 'LO1(H)' },
+    { key: 'lo1Low', label: 'LO1(L)' }
   ];
 
   return (
@@ -234,7 +199,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               Add LNB
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
             <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
                 <Radio className="h-5 w-5 text-primary" />
@@ -244,7 +209,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 Configure LNB specifications and technical parameters
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Device Name *</Label>
                 <Input
@@ -254,22 +219,6 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Universal Ku-Band LNB"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lnbType">LNB Type *</Label>
-                <Select
-                  value={formData.lnbType || ""}
-                  onValueChange={(value) => setFormData({ ...formData, lnbType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select LNB type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lnbTypes.map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bandType">Band Type</Label>
@@ -288,10 +237,10 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lnbPowerControl">LNB Power Control</Label>
+                <Label htmlFor="powerControl">LNB Power Control</Label>
                 <Select
-                  value={formData.lnbPowerControl || "Auto"}
-                  onValueChange={(value) => setFormData({ ...formData, lnbPowerControl: value })}
+                  value={formData.powerControl || "Auto"}
+                  onValueChange={(value) => setFormData({ ...formData, powerControl: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -320,22 +269,6 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="repeatMode">Repeat Mode</Label>
-                <Select
-                  value={formData.repeatMode || "Single"}
-                  onValueChange={(value) => setFormData({ ...formData, repeatMode: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {repeatModes.map((mode) => (
-                      <SelectItem key={mode} value={mode}>{mode}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="khzOption">22KHz Option</Label>
                 <Select
                   value={formData.khzOption || "Auto"}
@@ -352,9 +285,8 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lowFrequency">Low Frequency (MHz) *</Label>
+                <Label htmlFor="lowFrequency">Low Frequency (MHz)</Label>
                 <Input
-                  ref={lowFreqRef}
                   id="lowFrequency"
                   value={formData.lowFrequency || ""}
                   onChange={(e) => setFormData({ ...formData, lowFrequency: e.target.value })}
@@ -362,13 +294,30 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="highFrequency">High Frequency (MHz) *</Label>
+                <Label htmlFor="highFrequency">High Frequency (MHz)</Label>
                 <Input
-                  ref={highFreqRef}
                   id="highFrequency"
                   value={formData.highFrequency || ""}
                   onChange={(e) => setFormData({ ...formData, highFrequency: e.target.value })}
                   placeholder="e.g., 10600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lo1High">LO1(H) (MHz)</Label>
+                <Input
+                  id="lo1High"
+                  value={formData.lo1High || ""}
+                  onChange={(e) => setFormData({ ...formData, lo1High: e.target.value })}
+                  placeholder="e.g., 10600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lo1Low">LO1(L) (MHz)</Label>
+                <Input
+                  id="lo1Low"
+                  value={formData.lo1Low || ""}
+                  onChange={(e) => setFormData({ ...formData, lo1Low: e.target.value })}
+                  placeholder="e.g., 9750"
                 />
               </div>
             </div>

@@ -6,16 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Zap, Loader2 } from "lucide-react";
+import { Plus, Zap, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
 
 interface SwitchDevice {
   id: string;
-  name: string;
   switchType: string;
-  switchConfiguration: string;
+  switchOptions: string[];
 }
 
 interface SwitchManagementProps {
@@ -30,18 +29,9 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
   const [formData, setFormData] = useState<Partial<SwitchDevice>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  const nameRef = useRef<HTMLInputElement>(null);
+  const [newOption, setNewOption] = useState("");
 
-  const switchTypes = ["Dis1", "Dis2"];
-  
-  // Configuration options based on switch type
-  const dis1Configurations = ["123", "42", "56", "66", "78", "88"];
-  const dis2Configurations = ["1", "2", "3", "4", "5", "6", "7", "8"];
-
-  const getConfigurationOptions = () => {
-    return formData.switchType === "Dis1" ? dis1Configurations : dis2Configurations;
-  };
+  const switchTypes = ["Tone Burst", "DiSEqC 1.0", "DiSEqC 1.1"];
 
   useEffect(() => {
     loadDevices();
@@ -53,9 +43,8 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
       const allDevices = await apiService.getEquipment('switches');
       const switchDevices: SwitchDevice[] = allDevices.map(device => ({
         id: device.id,
-        name: device.name,
-        switchType: device.switchType || device.type || "Dis1",
-        switchConfiguration: device.switchConfiguration || ""
+        switchType: device.switchType || "Tone Burst",
+        switchOptions: Array.isArray(device.switchOptions) ? device.switchOptions : []
       }));
       setDevices(switchDevices);
     } finally {
@@ -65,14 +54,15 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
 
   const handleAdd = () => {
     setEditingDevice(null);
-    setFormData({ switchType: "Dis1" });
+    setFormData({ switchType: "Tone Burst", switchOptions: [] });
+    setNewOption("");
     setIsDialogOpen(true);
-    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEdit = (device: SwitchDevice) => {
     setEditingDevice(device);
     setFormData(device);
+    setNewOption("");
     setIsDialogOpen(true);
   };
 
@@ -81,7 +71,7 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
     try {
       const device = devices.find(d => d.id === id);
       await apiService.deleteEquipment('switches', id);
-      await apiService.logActivity(username, "Switch Deleted", `Deleted switch: ${device?.name}`, 'global');
+      await apiService.logActivity(username, "Switch Deleted", `Deleted switch: ${device?.switchType}`, 'global');
       
       loadDevices();
       toast({
@@ -94,16 +84,6 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
   };
 
   const validateForm = (): boolean => {
-    if (!formData.name?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Device name is required.",
-        variant: "destructive",
-      });
-      nameRef.current?.focus();
-      return false;
-    }
-
     if (!formData.switchType) {
       toast({
         title: "Validation Error",
@@ -112,17 +92,20 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
       });
       return false;
     }
-
-    if (!formData.switchConfiguration) {
-      toast({
-        title: "Validation Error",
-        description: "Switch Configuration is required.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
     return true;
+  };
+
+  const handleAddOption = () => {
+    if (newOption.trim()) {
+      const currentOptions = formData.switchOptions || [];
+      setFormData({ ...formData, switchOptions: [...currentOptions, newOption.trim()] });
+      setNewOption("");
+    }
+  };
+
+  const handleRemoveOption = (index: number) => {
+    const currentOptions = formData.switchOptions || [];
+    setFormData({ ...formData, switchOptions: currentOptions.filter((_, i) => i !== index) });
   };
 
   const handleSave = async () => {
@@ -130,28 +113,14 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
 
     setIsSaving(true);
     try {
-      // Check for duplicates
-      const isDuplicate = await apiService.checkDuplicate('switches', formData.name!, editingDevice?.id);
-      if (isDuplicate) {
-        toast({
-          title: "Duplicate Entry",
-          description: "A switch with this name already exists.",
-          variant: "destructive",
-        });
-        nameRef.current?.focus();
-        return;
-      }
-
       const deviceData = {
-        name: formData.name!,
-        type: formData.switchType!,
         switchType: formData.switchType!,
-        switchConfiguration: formData.switchConfiguration!
+        switchOptions: formData.switchOptions || []
       };
 
       if (editingDevice) {
         await apiService.updateEquipment('switches', editingDevice.id, deviceData);
-        await apiService.logActivity(username, "Switch Updated", `Updated switch: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Switch Updated", `Updated switch: ${formData.switchType}`, 'global');
         
         toast({
           title: "Switch Updated",
@@ -159,7 +128,7 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
         });
       } else {
         await apiService.saveEquipment('switches', deviceData);
-        await apiService.logActivity(username, "Switch Added", `Added new switch: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Switch Added", `Added new switch: ${formData.switchType}`, 'global');
         
         toast({
           title: "Switch Added",
@@ -175,22 +144,20 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
     }
   };
 
-  const handleSwitchTypeChange = (value: string) => {
-    setFormData({ 
-      ...formData, 
-      switchType: value,
-      switchConfiguration: "" // Reset configuration when type changes
-    });
-  };
-
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
     { key: 'switchType', label: 'Switch Type', sortable: true },
     { 
-      key: 'switchConfiguration', 
-      label: 'Configuration',
-      render: (value: string) => (
-        <Badge variant="secondary">{value}</Badge>
+      key: 'switchOptions', 
+      label: 'Options',
+      render: (value: string[]) => (
+        <div className="flex flex-wrap gap-1">
+          {(value || []).slice(0, 3).map((opt, i) => (
+            <Badge key={i} variant="secondary" className="text-xs">{opt}</Badge>
+          ))}
+          {(value || []).length > 3 && (
+            <Badge variant="outline" className="text-xs">+{value.length - 3} more</Badge>
+          )}
+        </div>
       )
     }
   ];
@@ -229,20 +196,10 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Device Name *</Label>
-                <Input
-                  ref={nameRef}
-                  id="name"
-                  value={formData.name || ""}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., 4x1 DiSEqC Switch"
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="switchType">Switch Type *</Label>
                 <Select
                   value={formData.switchType || ""}
-                  onValueChange={handleSwitchTypeChange}
+                  onValueChange={(value) => setFormData({ ...formData, switchType: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select switch type" />
@@ -254,29 +211,31 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="switchConfiguration">Switch Configuration *</Label>
-                <Select
-                  value={formData.switchConfiguration || ""}
-                  onValueChange={(value) => setFormData({ ...formData, switchConfiguration: value })}
-                  disabled={!formData.switchType}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={formData.switchType ? "Select configuration" : "Select switch type first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getConfigurationOptions().map((config) => (
-                      <SelectItem key={config} value={config}>{config}</SelectItem>
+                <Label>Switch Options</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newOption}
+                    onChange={(e) => setNewOption(e.target.value)}
+                    placeholder="Enter option value"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddOption())}
+                  />
+                  <Button type="button" variant="outline" onClick={handleAddOption}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {(formData.switchOptions || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {formData.switchOptions?.map((opt, i) => (
+                      <Badge key={i} variant="secondary" className="flex items-center gap-1">
+                        {opt}
+                        <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => handleRemoveOption(i)} />
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {formData.switchType === "Dis1" 
-                    ? "Dis1 configurations: 123, 42, 56, 66, 78, 88" 
-                    : formData.switchType === "Dis2" 
-                    ? "Dis2 configurations: 1-8" 
-                    : "Select a switch type to see available configurations"}
-                </p>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Add custom option values for this switch type</p>
               </div>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">

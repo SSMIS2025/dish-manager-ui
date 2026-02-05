@@ -35,66 +35,54 @@ CREATE TABLE IF NOT EXISTS projects (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- LNBs table
+-- LNBs table (Updated: removed lnb_type, repeat_mode; added lo1_high, lo1_low)
 CREATE TABLE IF NOT EXISTS lnbs (
     id VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    type VARCHAR(100),
-    low_frequency VARCHAR(100),
-    high_frequency VARCHAR(100),
-    band_type VARCHAR(100),
-    power_control VARCHAR(100),
-    lnb_type VARCHAR(100),
-    v_control VARCHAR(100),
-    repeat_mode VARCHAR(100),
-    khz_option VARCHAR(100),
-    test_result VARCHAR(50) DEFAULT 'Not Tested',
+    low_frequency VARCHAR(100) DEFAULT '',
+    high_frequency VARCHAR(100) DEFAULT '',
+    lo1_high VARCHAR(100) DEFAULT '',
+    lo1_low VARCHAR(100) DEFAULT '',
+    band_type VARCHAR(100) DEFAULT '',
+    power_control VARCHAR(100) DEFAULT '',
+    v_control VARCHAR(100) DEFAULT '',
+    khz_option VARCHAR(100) DEFAULT '',
     created_at DATETIME DEFAULT NULL,
     updated_at DATETIME DEFAULT NULL,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Switches table
+-- Switches table (Updated: removed name column, new types with JSON options)
 CREATE TABLE IF NOT EXISTS switches (
     id VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    type VARCHAR(100),
-    ports VARCHAR(100),
-    configuration VARCHAR(255),
-    switch_type VARCHAR(100),
-    switch_configuration VARCHAR(100),
+    switch_type VARCHAR(100) DEFAULT '',
+    switch_options TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT NULL,
     updated_at DATETIME DEFAULT NULL,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Motors table
+-- Motors table (Updated: removed name, simplified to two types)
 CREATE TABLE IF NOT EXISTS motors (
     id VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    type VARCHAR(100),
-    position VARCHAR(50),
-    position_count VARCHAR(50),
-    direction VARCHAR(50),
-    longitude VARCHAR(50),
-    latitude VARCHAR(50),
-    east_west VARCHAR(20),
-    north_south VARCHAR(20),
-    status VARCHAR(50) DEFAULT 'Positioned',
+    motor_type VARCHAR(100) DEFAULT '',
+    position VARCHAR(100) DEFAULT '',
+    longitude VARCHAR(100) DEFAULT '',
+    latitude VARCHAR(100) DEFAULT '',
+    east_west VARCHAR(50) DEFAULT '',
+    north_south VARCHAR(50) DEFAULT '',
     created_at DATETIME DEFAULT NULL,
     updated_at DATETIME DEFAULT NULL,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Unicables table
+-- Unicables table (Updated: DSCR/DCSS types with dynamic slots)
 CREATE TABLE IF NOT EXISTS unicables (
     id VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    type VARCHAR(100),
-    ports VARCHAR(50),
-    frequencies VARCHAR(255),
-    status VARCHAR(50),
-    port VARCHAR(50),
+    unicable_type VARCHAR(100) DEFAULT '',
+    status VARCHAR(50) DEFAULT 'OFF',
+    port VARCHAR(50) DEFAULT '',
+    if_slots TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT NULL,
     updated_at DATETIME DEFAULT NULL,
     PRIMARY KEY (id)
@@ -135,7 +123,7 @@ CREATE TABLE IF NOT EXISTS carriers (
     KEY idx_satellite_id (satellite_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Services table (linked to carriers)
+-- Services table (linked to carriers, added audio_pid)
 CREATE TABLE IF NOT EXISTS services (
     id VARCHAR(50) NOT NULL,
     carrier_id VARCHAR(50) NOT NULL,

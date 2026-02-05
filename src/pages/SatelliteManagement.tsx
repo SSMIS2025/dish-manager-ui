@@ -41,6 +41,7 @@ interface Service {
   name: string;
   frequency: string;
   videoPid: string;
+  audioPid: string;
   pcrPid: string;
   programNumber: string;
   favGroup: string;
@@ -406,7 +407,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const handleAddService = (carrier: Carrier) => {
     setSelectedCarrier(carrier);
     setEditingService(null);
-    setServiceFormData({ factoryDefault: false, scramble: false });
+    setServiceFormData({ factoryDefault: false, scramble: false, frequency: carrier.frequency });
     setIsServiceDialogOpen(true);
     setTimeout(() => serviceNameRef.current?.focus(), 100);
   };
@@ -437,6 +438,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         name: serviceFormData.name!,
         frequency: serviceFormData.frequency || "",
         videoPid: serviceFormData.videoPid || "",
+        audioPid: serviceFormData.audioPid || "",
         pcrPid: serviceFormData.pcrPid || "",
         programNumber: serviceFormData.programNumber || "",
         favGroup: serviceFormData.favGroup || "",
@@ -509,7 +511,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const getEquipmentName = (type: string, id: string) => {
     const lists: Record<string, any[]> = { lnb: allLnbs, switch: allSwitches, motor: allMotors, unicable: allUnicables };
     const item = lists[type]?.find(i => i.id === id);
-    return item?.name || "-";
+    if (!item) return "-";
+    // For types without name field, display type info
+    if (type === 'switch') return item.switchType || "-";
+    if (type === 'motor') return item.motorType || "-";
+    if (type === 'unicable') return item.unicableType || "-";
+    return item.name || "-";
   };
 
   const getTotalServices = () => {
@@ -814,6 +821,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                                 <TableHead>Name</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Video PID</TableHead>
+                                <TableHead>Audio PID</TableHead>
                                 <TableHead>PCR PID</TableHead>
                                 <TableHead>Program #</TableHead>
                                 <TableHead>Scramble</TableHead>
@@ -822,7 +830,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                             </TableHeader>
                             <TableBody>
                               {getFilteredServices().length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No services found.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No services found.</TableCell></TableRow>
                               ) : (
                                 getFilteredServices().map((service, index) => (
                                   <TableRow key={service.id} className="hover:bg-muted/30">
@@ -830,6 +838,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                                     <TableCell className="font-medium">{service.name}</TableCell>
                                     <TableCell>{service.frequency || '-'}</TableCell>
                                     <TableCell>{service.videoPid || '-'}</TableCell>
+                                    <TableCell>{service.audioPid || '-'}</TableCell>
                                     <TableCell>{service.pcrPid || '-'}</TableCell>
                                     <TableCell>{service.programNumber || '-'}</TableCell>
                                     <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
@@ -887,6 +896,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
             <div className="space-y-2"><Label>Service Name *</Label><Input ref={serviceNameRef} value={serviceFormData.name || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} placeholder="e.g., BBC One HD" /></div>
             <div className="space-y-2"><Label>Frequency</Label><Input value={serviceFormData.frequency || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, frequency: e.target.value })} placeholder="e.g., 10773" /></div>
             <div className="space-y-2"><Label>Video PID</Label><Input value={serviceFormData.videoPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, videoPid: e.target.value })} placeholder="e.g., 5500" /></div>
+            <div className="space-y-2"><Label>Audio PID</Label><Input value={serviceFormData.audioPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, audioPid: e.target.value })} placeholder="e.g., 5501" /></div>
             <div className="space-y-2"><Label>PCR PID</Label><Input value={serviceFormData.pcrPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, pcrPid: e.target.value })} placeholder="e.g., 5500" /></div>
             <div className="space-y-2"><Label>Program Number</Label><Input value={serviceFormData.programNumber || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, programNumber: e.target.value })} placeholder="e.g., 6940" /></div>
             <div className="space-y-2"><Label>FAV Group</Label><Input value={serviceFormData.favGroup || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, favGroup: e.target.value })} placeholder="e.g., Entertainment" /></div>
@@ -912,9 +922,9 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>LNB</Label><Select value={formData.mappedLnb || "none"} onValueChange={(v) => setFormData({ ...formData, mappedLnb: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Switch</Label><Select value={formData.mappedSwitch || "none"} onValueChange={(v) => setFormData({ ...formData, mappedSwitch: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Motor</Label><Select value={formData.mappedMotor || "none"} onValueChange={(v) => setFormData({ ...formData, mappedMotor: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Unicable</Label><Select value={formData.mappedUnicable || "none"} onValueChange={(v) => setFormData({ ...formData, mappedUnicable: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Unicable" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allUnicables.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Switch</Label><Select value={formData.mappedSwitch || "none"} onValueChange={(v) => setFormData({ ...formData, mappedSwitch: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType || `Switch ${s.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Motor</Label><Select value={formData.mappedMotor || "none"} onValueChange={(v) => setFormData({ ...formData, mappedMotor: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType || `Motor ${m.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Unicable</Label><Select value={formData.mappedUnicable || "none"} onValueChange={(v) => setFormData({ ...formData, mappedUnicable: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Unicable" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allUnicables.map(u => <SelectItem key={u.id} value={u.id}>{u.unicableType || `Unicable ${u.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsEquipmentDialogOpen(false)}>Cancel</Button>
