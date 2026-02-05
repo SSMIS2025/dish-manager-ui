@@ -92,6 +92,12 @@ export const EquipmentTable = ({
       result = result.filter(item =>
         columns.some(col => {
           const value = item[col.key];
+          // Handle arrays (like switchOptions)
+          if (Array.isArray(value)) {
+            return value.some(v => String(v).toLowerCase().includes(query));
+          }
+          // Handle objects
+          if (typeof value === 'object' && value !== null) return false;
           return value && String(value).toLowerCase().includes(query);
         })
       );
@@ -225,7 +231,10 @@ export const EquipmentTable = ({
                           <AlertDialogHeader>
                             <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete "{item.name}"? This action cannot be undone.
+                              Are you sure you want to delete "{
+                                item.name || item.switchType || item.motorType || item.unicableType || 
+                                `Item ${item.id?.slice(-6) || ''}`
+                              }"? This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

@@ -3,10 +3,10 @@ const router = express.Router();
 
 // Equipment field definitions
 const EQUIPMENT_FIELDS = {
-  lnbs: ['name', 'type', 'lnb_type', 'band_type', 'power_control', 'v_control', 'repeat_mode', 'khz_option', 'low_frequency', 'high_frequency', 'test_result'],
-  switches: ['name', 'type', 'switch_type', 'switch_configuration'],
-  motors: ['name', 'type', 'position', 'longitude', 'latitude', 'east_west', 'north_south', 'status'],
-  unicables: ['name', 'type', 'status', 'port']
+  lnbs: ['name', 'low_frequency', 'high_frequency', 'lo1_high', 'lo1_low', 'band_type', 'power_control', 'v_control', 'khz_option'],
+  switches: ['switch_type', 'switch_options'],
+  motors: ['motor_type', 'position', 'longitude', 'latitude', 'east_west', 'north_south'],
+  unicables: ['unicable_type', 'status', 'port', 'if_slots']
 };
 
 // Transform helpers
@@ -16,7 +16,13 @@ const snakeToCamel = (str) => str.replace(/_([a-z])/g, (_, letter) => letter.toU
 const transformToSnakeCase = (obj) => {
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
-    result[camelToSnake(key)] = value;
+    const snakeKey = camelToSnake(key);
+    // Handle JSON fields
+    if ((snakeKey === 'switch_options' || snakeKey === 'if_slots') && typeof value === 'object') {
+      result[snakeKey] = JSON.stringify(value);
+    } else {
+      result[snakeKey] = value;
+    }
   }
   return result;
 };
@@ -24,7 +30,17 @@ const transformToSnakeCase = (obj) => {
 const transformToCamelCase = (obj) => {
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
-    result[snakeToCamel(key)] = value;
+    const camelKey = snakeToCamel(key);
+    // Parse JSON fields
+    if ((key === 'switch_options' || key === 'if_slots') && typeof value === 'string') {
+      try {
+        result[camelKey] = JSON.parse(value);
+      } catch (e) {
+        result[camelKey] = [];
+      }
+    } else {
+      result[camelKey] = value;
+    }
   }
   return result;
 };
@@ -38,19 +54,20 @@ module.exports = (pool, asyncHandler, generateId, getMySQLDateTime) => {
     res.json({ success: true, data: transformed });
   }));
 
-  // Check duplicate equipment name
+  // Check duplicate equipment (for switches/motors/unicables, check by id since no name field)
   router.get('/:type/check-duplicate', asyncHandler(async (req, res) => {
     const { type } = req.params;
     const { name, excludeId } = req.query;
     
-    let query = `SELECT COUNT(*) as count FROM ${type} WHERE LOWER(name) = LOWER(?)`;
-    const params = [name];
-    
-    if (excludeId) {
-      query += ' AND id != ?';
-      params.push(excludeId);
+    // For types without name field, always return false
+    if (['switches', 'motors', 'unicables'].includes(type)) {
+      res.json({ success: true, data: { exists: false } });
+      return;
     }
     
+    let query = `SELECT COUNT(*) as count FROM ${type} WHERE LOWER(name) = LOWER(?)`;
+    const params = [name];
+    if (excludeId) { query += ' AND id != ?'; params.push(excludeId); }
     const [rows] = await pool.execute(query, params);
     res.json({ success: true, data: { exists: rows[0].count > 0 } });
   }));

@@ -2,10 +2,11 @@
 
 export interface Equipment {
   id: string;
-  name: string;
-  type: string;
+  name?: string;
+  type?: string;
   createdAt: string;
   updatedAt: string;
+  projectId?: string;
   [key: string]: any;
 }
 
@@ -86,8 +87,6 @@ class StorageService {
   saveEquipment(type: string, equipment: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt'>, projectId: string): Equipment {
     const allEquipment = this.getEquipment(type);
     const newEquipment: Equipment = {
-      name: equipment.name || '',
-      type: equipment.type || type,
       ...equipment,
       id: this.generateId(),
       projectId,

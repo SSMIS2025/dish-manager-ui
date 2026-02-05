@@ -6,17 +6,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Activity, Loader2 } from "lucide-react";
+import { Plus, Activity, Loader2, X, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
 
+interface IFSlot {
+  slotNumber: number;
+  frequency: string;
+}
+
 interface UnicableDevice {
   id: string;
-  name: string;
-  type: string;
+  unicableType: string;
   status: string;
   port: string;
+  ifSlots: IFSlot[];
 }
 
 interface UnicableManagementProps {
@@ -31,12 +36,10 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
   const [formData, setFormData] = useState<Partial<UnicableDevice>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  const nameRef = useRef<HTMLInputElement>(null);
 
-  const unicableTypes = ["DSCR", "DDR"];
-  const statusOptions = ["Active", "Inactive", "Error"];
-  const portOptions = ["1", "2", "3", "4", "5", "6", "7", "8"];
+  const unicableTypes = ["DSCR", "DCSS"];
+  const statusOptions = ["ON", "OFF"];
+  const portOptions = ["None", "A", "B"];
 
   useEffect(() => {
     loadDevices();
@@ -48,10 +51,10 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
       const allDevices = await apiService.getEquipment('unicables');
       const unicableDevices: UnicableDevice[] = allDevices.map(device => ({
         id: device.id,
-        name: device.name,
-        type: device.type || "DSCR",
-        status: device.status || "Active",
-        port: device.port || ""
+        unicableType: device.unicableType || "DSCR",
+        status: device.status || "OFF",
+        port: device.port || "None",
+        ifSlots: Array.isArray(device.ifSlots) ? device.ifSlots : []
       }));
       setDevices(unicableDevices);
     } finally {
@@ -61,9 +64,8 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
 
   const handleAdd = () => {
     setEditingDevice(null);
-    setFormData({ type: "DSCR" });
+    setFormData({ unicableType: "DSCR", status: "OFF", port: "None", ifSlots: [] });
     setIsDialogOpen(true);
-    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEdit = (device: UnicableDevice) => {
@@ -77,7 +79,7 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
     try {
       const device = devices.find(d => d.id === id);
       await apiService.deleteEquipment('unicables', id);
-      await apiService.logActivity(username, "Unicable Deleted", `Deleted unicable: ${device?.name}`, 'global');
+      await apiService.logActivity(username, "Unicable Deleted", `Deleted unicable: ${device?.unicableType}`, 'global');
       
       loadDevices();
       toast({
@@ -90,17 +92,7 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
   };
 
   const validateForm = (): boolean => {
-    if (!formData.name?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Device name is required.",
-        variant: "destructive",
-      });
-      nameRef.current?.focus();
-      return false;
-    }
-
-    if (!formData.type) {
+    if (!formData.unicableType) {
       toast({
         title: "Validation Error",
         description: "Unicable Type is required.",
@@ -108,18 +100,35 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
       });
       return false;
     }
-
-    // Port is required only for DSCR type
-    if (formData.type === "DSCR" && !formData.port) {
-      toast({
-        title: "Validation Error",
-        description: "Port is required for DSCR type.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
     return true;
+  };
+
+  const handleAddSlot = () => {
+    const currentSlots = formData.ifSlots || [];
+    if (currentSlots.length >= 32) {
+      toast({ title: "Limit Reached", description: "Maximum 32 slots allowed.", variant: "destructive" });
+      return;
+    }
+    const nextSlotNumber = currentSlots.length + 1;
+    setFormData({
+      ...formData,
+      ifSlots: [...currentSlots, { slotNumber: nextSlotNumber, frequency: "" }]
+    });
+  };
+
+  const handleRemoveSlot = (index: number) => {
+    const currentSlots = formData.ifSlots || [];
+    const newSlots = currentSlots.filter((_, i) => i !== index).map((slot, i) => ({
+      ...slot,
+      slotNumber: i + 1
+    }));
+    setFormData({ ...formData, ifSlots: newSlots });
+  };
+
+  const handleSlotChange = (index: number, frequency: string) => {
+    const currentSlots = [...(formData.ifSlots || [])];
+    currentSlots[index] = { ...currentSlots[index], frequency };
+    setFormData({ ...formData, ifSlots: currentSlots });
   };
 
   const handleSave = async () => {
@@ -127,28 +136,16 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
 
     setIsSaving(true);
     try {
-      // Check for duplicates
-      const isDuplicate = await apiService.checkDuplicate('unicables', formData.name!, editingDevice?.id);
-      if (isDuplicate) {
-        toast({
-          title: "Duplicate Entry",
-          description: "A unicable with this name already exists.",
-          variant: "destructive",
-        });
-        nameRef.current?.focus();
-        return;
-      }
-
       const deviceData = {
-        name: formData.name!,
-        type: formData.type!,
-        status: formData.status || "Active",
-        port: formData.type === "DSCR" ? (formData.port || "") : ""
+        unicableType: formData.unicableType!,
+        status: formData.status || "OFF",
+        port: formData.unicableType === "DSCR" ? (formData.port || "None") : "",
+        ifSlots: formData.ifSlots || []
       };
 
       if (editingDevice) {
         await apiService.updateEquipment('unicables', editingDevice.id, deviceData);
-        await apiService.logActivity(username, "Unicable Updated", `Updated unicable: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Unicable Updated", `Updated unicable: ${formData.unicableType}`, 'global');
         
         toast({
           title: "Unicable Updated",
@@ -156,7 +153,7 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
         });
       } else {
         await apiService.saveEquipment('unicables', deviceData);
-        await apiService.logActivity(username, "Unicable Added", `Added new unicable: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Unicable Added", `Added new unicable: ${formData.unicableType}`, 'global');
         
         toast({
           title: "Unicable Added",
@@ -172,39 +169,28 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
     }
   };
 
-  const handleTypeChange = (value: string) => {
-    setFormData({ 
-      ...formData, 
-      type: value,
-      port: value === "DDR" ? "" : formData.port // Clear port if DDR
-    });
-  };
-
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'type', label: 'Type', sortable: true },
+    { key: 'unicableType', label: 'Type', sortable: true },
+    { 
+      key: 'status', 
+      label: 'Status',
+      render: (value: string) => (
+        <Badge variant={value === "ON" ? "default" : "secondary"}>{value}</Badge>
+      )
+    },
     { 
       key: 'port', 
       label: 'Port',
       render: (value: string, item: UnicableDevice) => (
-        item.type === "DSCR" ? <Badge variant="secondary">{value || '-'}</Badge> : <span className="text-muted-foreground">N/A</span>
+        item.unicableType === "DSCR" ? <Badge variant="outline">{value || 'None'}</Badge> : <span className="text-muted-foreground">-</span>
       )
     },
     { 
-      key: 'status', 
-      label: 'Status',
-      render: (value: string) => {
-        const statusColors: Record<string, string> = {
-          'Active': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-          'Inactive': 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-          'Error': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-        };
-        return (
-          <Badge className={statusColors[value] || ''}>
-            {value || 'Active'}
-          </Badge>
-        );
-      }
+      key: 'ifSlots', 
+      label: 'IF Slots',
+      render: (value: IFSlot[]) => (
+        <Badge variant="secondary">{(value || []).length} slots</Badge>
+      )
     }
   ];
 
@@ -230,7 +216,7 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
               Add Unicable
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-primary" />
@@ -242,20 +228,14 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Device Name *</Label>
-                <Input
-                  ref={nameRef}
-                  id="name"
-                  value={formData.name || ""}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Unicable II LNB"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Unicable Type *</Label>
+                <Label htmlFor="unicableType">Unicable Type *</Label>
                 <Select
-                  value={formData.type || "DSCR"}
-                  onValueChange={handleTypeChange}
+                  value={formData.unicableType || "DSCR"}
+                  onValueChange={(value) => setFormData({ 
+                    ...formData, 
+                    unicableType: value,
+                    port: value === "DCSS" ? "" : formData.port
+                  })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select unicable type" />
@@ -268,30 +248,10 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
                 </Select>
               </div>
               
-              {/* Port - only shown for DSCR type */}
-              {formData.type === "DSCR" && (
-                <div className="space-y-2">
-                  <Label htmlFor="port">Port *</Label>
-                  <Select
-                    value={formData.port || ""}
-                    onValueChange={(value) => setFormData({ ...formData, port: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select port" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {portOptions.map((port) => (
-                        <SelectItem key={port} value={port}>Port {port}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
-                  value={formData.status || "Active"}
+                  value={formData.status || "OFF"}
                   onValueChange={(value) => setFormData({ ...formData, status: value })}
                 >
                   <SelectTrigger>
@@ -303,6 +263,68 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              
+              {/* Port - only shown for DSCR type */}
+              {formData.unicableType === "DSCR" && (
+                <div className="space-y-2">
+                  <Label htmlFor="port">Port</Label>
+                  <Select
+                    value={formData.port || "None"}
+                    onValueChange={(value) => setFormData({ ...formData, port: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select port" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {portOptions.map((port) => (
+                        <SelectItem key={port} value={port}>{port}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {/* IF Frequency Slots */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>IF Frequency Slots</Label>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleAddSlot}
+                    disabled={(formData.ifSlots || []).length >= 32}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add Slot
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Add up to 32 IF frequency slots</p>
+                
+                {(formData.ifSlots || []).length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                    {formData.ifSlots?.map((slot, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Label className="w-16 text-sm text-muted-foreground">Slot {slot.slotNumber}</Label>
+                        <Input
+                          value={slot.frequency}
+                          onChange={(e) => handleSlotChange(index, e.target.value)}
+                          placeholder="IF Frequency (MHz)"
+                          className="flex-1"
+                        />
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleRemoveSlot(index)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">

@@ -578,47 +578,49 @@ class MySQLDatabaseHandler {
   }
 
   getEquipmentInsertData(type, id, data, now) {
-    const baseColumns = ['id', 'name', 'type', 'created_at', 'updated_at'];
-    const baseValues = [id, data.name || '', data.type || '', now, now];
+    const baseColumns = ['id', 'created_at', 'updated_at'];
+    const baseValues = [id, now, now];
     
     const typeFields = {
       lnbs: {
-        columns: ['low_frequency', 'high_frequency', 'band_type', 'power_control', 'lnb_type'],
+        columns: ['name', 'low_frequency', 'high_frequency', 'lo1_high', 'lo1_low', 'band_type', 'power_control', 'v_control', 'khz_option'],
         values: [
+          data.name || '',
           data.lowFrequency || data.low_frequency || '',
           data.highFrequency || data.high_frequency || '',
+          data.lo1High || data.lo1_high || '',
+          data.lo1Low || data.lo1_low || '',
           data.bandType || data.band_type || '',
           data.powerControl || data.power_control || '',
-          data.lnbType || data.lnb_type || ''
+          data.vControl || data.v_control || '',
+          data.khzOption || data.khz_option || ''
         ]
       },
       switches: {
-        columns: ['ports', 'configuration', 'switch_type', 'switch_configuration'],
+        columns: ['switch_type', 'switch_options'],
         values: [
-          data.ports || '',
-          data.configuration || '',
           data.switchType || data.switch_type || '',
-          data.switchConfiguration || data.switch_configuration || ''
+          typeof data.switchOptions === 'object' ? JSON.stringify(data.switchOptions) : (data.switch_options || '[]')
         ]
       },
       motors: {
-        columns: ['position', 'position_count', 'direction', 'longitude', 'latitude', 'status'],
+        columns: ['motor_type', 'position', 'longitude', 'latitude', 'east_west', 'north_south'],
         values: [
+          data.motorType || data.motor_type || '',
           data.position || '',
-          data.positionCount || data.position_count || '',
-          data.direction || '',
           data.longitude || '',
           data.latitude || '',
-          data.status || 'Positioned'
+          data.eastWest || data.east_west || '',
+          data.northSouth || data.north_south || ''
         ]
       },
       unicables: {
-        columns: ['ports', 'frequencies', 'port', 'status'],
+        columns: ['unicable_type', 'status', 'port', 'if_slots'],
         values: [
-          data.ports || '',
-          data.frequencies || '',
+          data.unicableType || data.unicable_type || '',
+          data.status || 'OFF',
           data.port || '',
-          data.status || ''
+          typeof data.ifSlots === 'object' ? JSON.stringify(data.ifSlots) : (data.if_slots || '[]')
         ]
       }
     };
@@ -637,24 +639,35 @@ class MySQLDatabaseHandler {
     const values = [now];
     
     if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name); }
-    if (data.type !== undefined) { updates.push('type = ?'); values.push(data.type); }
     
     const fieldMap = {
       lowFrequency: 'low_frequency',
       highFrequency: 'high_frequency',
+      lo1High: 'lo1_high',
+      lo1Low: 'lo1_low',
       bandType: 'band_type',
       powerControl: 'power_control',
-      lnbType: 'lnb_type',
-      positionCount: 'position_count',
+      vControl: 'v_control',
+      khzOption: 'khz_option',
       switchType: 'switch_type',
-      switchConfiguration: 'switch_configuration'
+      switchOptions: 'switch_options',
+      motorType: 'motor_type',
+      eastWest: 'east_west',
+      northSouth: 'north_south',
+      unicableType: 'unicable_type',
+      ifSlots: 'if_slots'
     };
     
     Object.keys(data).forEach(key => {
-      if (['id', 'name', 'type', 'createdAt', 'updatedAt', 'created_at', 'updated_at'].includes(key)) return;
+      if (['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at'].includes(key)) return;
       const dbField = fieldMap[key] || key;
+      let value = data[key];
+      // Stringify objects for JSON fields
+      if ((dbField === 'switch_options' || dbField === 'if_slots') && typeof value === 'object') {
+        value = JSON.stringify(value);
+      }
       updates.push(`${dbField} = ?`);
-      values.push(data[key]);
+      values.push(value);
     });
     
     return { updates, values };
@@ -699,36 +712,40 @@ class MySQLDatabaseHandler {
     if (!row) return null;
     const base = {
       id: row.id,
-      name: row.name,
-      type: row.type,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
     
     // Add type-specific fields
     if (type === 'lnbs') {
+      base.name = row.name;
       base.lowFrequency = row.low_frequency;
       base.highFrequency = row.high_frequency;
+      base.lo1High = row.lo1_high;
+      base.lo1Low = row.lo1_low;
       base.bandType = row.band_type;
       base.powerControl = row.power_control;
-      base.lnbType = row.lnb_type;
+      base.vControl = row.v_control;
+      base.khzOption = row.khz_option;
     } else if (type === 'switches') {
-      base.ports = row.ports;
-      base.configuration = row.configuration;
       base.switchType = row.switch_type;
-      base.switchConfiguration = row.switch_configuration;
+      try {
+        base.switchOptions = row.switch_options ? JSON.parse(row.switch_options) : [];
+      } catch (e) { base.switchOptions = []; }
     } else if (type === 'motors') {
+      base.motorType = row.motor_type;
       base.position = row.position;
-      base.positionCount = row.position_count;
-      base.direction = row.direction;
       base.longitude = row.longitude;
       base.latitude = row.latitude;
-      base.status = row.status;
+      base.eastWest = row.east_west;
+      base.northSouth = row.north_south;
     } else if (type === 'unicables') {
-      base.ports = row.ports;
-      base.frequencies = row.frequencies;
-      base.port = row.port;
+      base.unicableType = row.unicable_type;
       base.status = row.status;
+      base.port = row.port;
+      try {
+        base.ifSlots = row.if_slots ? JSON.parse(row.if_slots) : [];
+      } catch (e) { base.ifSlots = []; }
     }
     
     return base;

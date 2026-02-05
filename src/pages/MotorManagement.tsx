@@ -13,14 +13,12 @@ import { EquipmentTable } from "@/components/EquipmentTable";
 
 interface MotorDevice {
   id: string;
-  name: string;
-  type: string;
+  motorType: string;
   position: string;
   longitude: string;
   latitude: string;
   eastWest: string;
   northSouth: string;
-  status: string;
 }
 
 interface MotorManagementProps {
@@ -35,14 +33,8 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
   const [formData, setFormData] = useState<Partial<MotorDevice>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  const nameRef = useRef<HTMLInputElement>(null);
-  const positionRef = useRef<HTMLInputElement>(null);
-  const longitudeRef = useRef<HTMLInputElement>(null);
-  const latitudeRef = useRef<HTMLInputElement>(null);
 
-  const motorTypes = ["DiSEqC 1.2", "DiSEqC 1.3 (USALS)", "H-H Mount", "Polar Mount"];
-  const statusOptions = ["Positioned", "Moving", "Error", "Calibrating"];
+  const motorTypes = ["DiSEqC 1.0", "DiSEqC 1.2"];
   const eastWestOptions = ["East", "West"];
   const northSouthOptions = ["North", "South"];
 
@@ -56,14 +48,12 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
       const allDevices = await apiService.getEquipment('motors');
       const motorDevices: MotorDevice[] = allDevices.map(device => ({
         id: device.id,
-        name: device.name,
-        type: device.type || "",
+        motorType: device.motorType || "DiSEqC 1.0",
         position: device.position || "",
         longitude: device.longitude || "",
         latitude: device.latitude || "",
         eastWest: device.eastWest || "East",
-        northSouth: device.northSouth || "North",
-        status: device.status || "Positioned"
+        northSouth: device.northSouth || "North"
       }));
       setDevices(motorDevices);
     } finally {
@@ -73,9 +63,8 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
 
   const handleAdd = () => {
     setEditingDevice(null);
-    setFormData({});
+    setFormData({ motorType: "DiSEqC 1.0" });
     setIsDialogOpen(true);
-    setTimeout(() => nameRef.current?.focus(), 100);
   };
 
   const handleEdit = (device: MotorDevice) => {
@@ -89,7 +78,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
     try {
       const device = devices.find(d => d.id === id);
       await apiService.deleteEquipment('motors', id);
-      await apiService.logActivity(username, "Motor Deleted", `Deleted motor: ${device?.name}`, 'global');
+      await apiService.logActivity(username, "Motor Deleted", `Deleted motor: ${device?.motorType}`, 'global');
       
       loadDevices();
       toast({
@@ -102,17 +91,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
   };
 
   const validateForm = (): boolean => {
-    if (!formData.name?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Device name is required.",
-        variant: "destructive",
-      });
-      nameRef.current?.focus();
-      return false;
-    }
-
-    if (!formData.type) {
+    if (!formData.motorType) {
       toast({
         title: "Validation Error",
         description: "Motor Type is required.",
@@ -120,7 +99,6 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
       });
       return false;
     }
-
     return true;
   };
 
@@ -129,32 +107,18 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
 
     setIsSaving(true);
     try {
-      // Check for duplicates
-      const isDuplicate = await apiService.checkDuplicate('motors', formData.name!, editingDevice?.id);
-      if (isDuplicate) {
-        toast({
-          title: "Duplicate Entry",
-          description: "A motor with this name already exists.",
-          variant: "destructive",
-        });
-        nameRef.current?.focus();
-        return;
-      }
-
       const deviceData = {
-        name: formData.name!,
-        type: formData.type!,
+        motorType: formData.motorType!,
         position: formData.position || "",
         longitude: formData.longitude || "",
         latitude: formData.latitude || "",
         eastWest: formData.eastWest || "East",
-        northSouth: formData.northSouth || "North",
-        status: formData.status || "Positioned"
+        northSouth: formData.northSouth || "North"
       };
 
       if (editingDevice) {
         await apiService.updateEquipment('motors', editingDevice.id, deviceData);
-        await apiService.logActivity(username, "Motor Updated", `Updated motor: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Motor Updated", `Updated motor: ${formData.motorType}`, 'global');
         
         toast({
           title: "Motor Updated",
@@ -162,7 +126,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
         });
       } else {
         await apiService.saveEquipment('motors', deviceData);
-        await apiService.logActivity(username, "Motor Added", `Added new motor: ${formData.name}`, 'global');
+        await apiService.logActivity(username, "Motor Added", `Added new motor: ${formData.motorType}`, 'global');
         
         toast({
           title: "Motor Added",
@@ -179,32 +143,41 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
   };
 
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'type', label: 'Type', sortable: true },
-    { key: 'position', label: 'Position', sortable: true },
-    { key: 'longitude', label: 'Longitude' },
-    { key: 'latitude', label: 'Latitude' },
+    { key: 'motorType', label: 'Motor Type', sortable: true },
+    { 
+      key: 'position', 
+      label: 'Position',
+      render: (value: string, item: MotorDevice) => (
+        item.motorType === "DiSEqC 1.0" ? (value || "None") : "-"
+      )
+    },
+    { 
+      key: 'longitude', 
+      label: 'Longitude',
+      render: (value: string, item: MotorDevice) => (
+        item.motorType === "DiSEqC 1.2" ? value || "-" : "-"
+      )
+    },
+    { 
+      key: 'latitude', 
+      label: 'Latitude',
+      render: (value: string, item: MotorDevice) => (
+        item.motorType === "DiSEqC 1.2" ? value || "-" : "-"
+      )
+    },
     { 
       key: 'eastWest', 
       label: 'E/W',
-      render: (value: string) => <Badge variant="outline">{value}</Badge>
+      render: (value: string, item: MotorDevice) => (
+        item.motorType === "DiSEqC 1.2" ? <Badge variant="outline">{value}</Badge> : "-"
+      )
     },
     { 
-      key: 'status', 
-      label: 'Status',
-      render: (value: string) => {
-        const statusColors: Record<string, string> = {
-          'Positioned': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-          'Moving': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-          'Error': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-          'Calibrating': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-        };
-        return (
-          <Badge className={statusColors[value] || ''}>
-            {value || 'Positioned'}
-          </Badge>
-        );
-      }
+      key: 'northSouth', 
+      label: 'N/S',
+      render: (value: string, item: MotorDevice) => (
+        item.motorType === "DiSEqC 1.2" ? <Badge variant="outline">{value}</Badge> : "-"
+      )
     }
   ];
 
@@ -230,7 +203,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
               Add Motor
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
             <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
                 <RotateCcw className="h-5 w-5 text-primary" />
@@ -240,22 +213,12 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
                 Configure motor specifications and positioning
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Device Name *</Label>
-                <Input
-                  ref={nameRef}
-                  id="name"
-                  value={formData.name || ""}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., USALS Motor"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Motor Type *</Label>
+                <Label htmlFor="motorType">Motor Type *</Label>
                 <Select
-                  value={formData.type || ""}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  value={formData.motorType || ""}
+                  onValueChange={(value) => setFormData({ ...formData, motorType: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select motor type" />
@@ -267,84 +230,77 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="position">Position</Label>
-                <Input
-                  ref={positionRef}
-                  id="position"
-                  value={formData.position || ""}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g., 28.2°"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="longitude">Longitude</Label>
-                <Input
-                  ref={longitudeRef}
-                  id="longitude"
-                  value={formData.longitude || ""}
-                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                  placeholder="e.g., -0.1278"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="latitude">Latitude</Label>
-                <Input
-                  ref={latitudeRef}
-                  id="latitude"
-                  value={formData.latitude || ""}
-                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                  placeholder="e.g., 51.5074"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="eastWest">East/West</Label>
-                <Select
-                  value={formData.eastWest || "East"}
-                  onValueChange={(value) => setFormData({ ...formData, eastWest: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eastWestOptions.map((opt) => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="northSouth">North/South</Label>
-                <Select
-                  value={formData.northSouth || "North"}
-                  onValueChange={(value) => setFormData({ ...formData, northSouth: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {northSouthOptions.map((opt) => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status || "Positioned"}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              
+              {/* DiSEqC 1.0 fields */}
+              {formData.motorType === "DiSEqC 1.0" && (
+                <div className="space-y-2">
+                  <Label htmlFor="position">Position</Label>
+                  <Input
+                    id="position"
+                    type="number"
+                    value={formData.position || ""}
+                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                    placeholder="Enter position number or leave empty for None"
+                  />
+                  <p className="text-xs text-muted-foreground">Leave empty for "None" or enter a position number</p>
+                </div>
+              )}
+              
+              {/* DiSEqC 1.2 fields */}
+              {formData.motorType === "DiSEqC 1.2" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="longitude">Longitude</Label>
+                    <Input
+                      id="longitude"
+                      value={formData.longitude || ""}
+                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                      placeholder="e.g., -0.1278"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="latitude">Latitude</Label>
+                    <Input
+                      id="latitude"
+                      value={formData.latitude || ""}
+                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                      placeholder="e.g., 51.5074"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="eastWest">East/West</Label>
+                    <Select
+                      value={formData.eastWest || "East"}
+                      onValueChange={(value) => setFormData({ ...formData, eastWest: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eastWestOptions.map((opt) => (
+                          <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="northSouth">North/South</Label>
+                    <Select
+                      value={formData.northSouth || "North"}
+                      onValueChange={(value) => setFormData({ ...formData, northSouth: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {northSouthOptions.map((opt) => (
+                          <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
