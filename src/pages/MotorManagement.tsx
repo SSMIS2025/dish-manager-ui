@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,6 +9,7 @@ import { Plus, RotateCcw, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
+import InlineFormField from "@/components/InlineFormField";
 
 interface MotorDevice {
   id: string;
@@ -214,91 +214,73 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="motorType">Motor Type *</Label>
+              <InlineFormField label="Motor Type" required>
                 <Select
                   value={formData.motorType || ""}
                   onValueChange={(value) => setFormData({ ...formData, motorType: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select motor type" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select motor type" /></SelectTrigger>
                   <SelectContent>
                     {motorTypes.map((type) => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </InlineFormField>
               
-              {/* DiSEqC 1.0 fields */}
               {formData.motorType === "DiSEqC 1.0" && (
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
+                <InlineFormField label="Position">
                   <Input
-                    id="position"
                     type="number"
                     value={formData.position || ""}
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    placeholder="Enter position number or leave empty for None"
+                    placeholder="Enter position number or leave empty"
                   />
-                  <p className="text-xs text-muted-foreground">Leave empty for "None" or enter a position number</p>
-                </div>
+                </InlineFormField>
               )}
               
-              {/* DiSEqC 1.2 fields */}
               {formData.motorType === "DiSEqC 1.2" && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="longitude">Longitude</Label>
+                  <InlineFormField label="Longitude">
                     <Input
-                      id="longitude"
                       value={formData.longitude || ""}
                       onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
                       placeholder="e.g., -0.1278"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="latitude">Latitude</Label>
+                  </InlineFormField>
+                  <InlineFormField label="Latitude">
                     <Input
-                      id="latitude"
                       value={formData.latitude || ""}
                       onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
                       placeholder="e.g., 51.5074"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="eastWest">East/West</Label>
+                  </InlineFormField>
+                  <InlineFormField label="East/West">
                     <Select
                       value={formData.eastWest || "East"}
                       onValueChange={(value) => setFormData({ ...formData, eastWest: value })}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {eastWestOptions.map((opt) => (
                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="northSouth">North/South</Label>
+                  </InlineFormField>
+                  <InlineFormField label="North/South">
                     <Select
                       value={formData.northSouth || "North"}
                       onValueChange={(value) => setFormData({ ...formData, northSouth: value })}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {northSouthOptions.map((opt) => (
                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </InlineFormField>
                 </>
               )}
             </div>

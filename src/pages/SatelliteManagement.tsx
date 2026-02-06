@@ -2,17 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, Loader2, Settings, Search, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
+import InlineFormField from "@/components/InlineFormField";
+import EquipmentMappingModal from "@/components/EquipmentMappingModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -80,7 +81,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSavingEquipment, setIsSavingEquipment] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   
   // Filter states
@@ -238,7 +238,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         loadSatellites();
         toast({ title: "Satellite Deleted", description: "The satellite and all its carriers/services have been removed." });
       } else if (deleteTarget.type === 'carrier' && selectedSatellite) {
-        // Delete carrier and its services
         const updatedCarriers = selectedSatellite.carriers.filter(c => c.id !== deleteTarget.id);
         const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
         await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
@@ -281,7 +280,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       return false;
     }
 
-    // Check for duplicate name
     const isDuplicate = await apiService.checkSatelliteDuplicate(
       formData.name,
       editingSatellite?.id
@@ -473,46 +471,32 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     }
   };
 
-  // Equipment mapping
+  // Equipment mapping with XXL modal
   const handleOpenEquipmentDialog = () => {
     if (selectedSatellite) {
-      setFormData({
-        mappedLnb: selectedSatellite.mappedLnb,
-        mappedSwitch: selectedSatellite.mappedSwitch,
-        mappedMotor: selectedSatellite.mappedMotor,
-        mappedUnicable: selectedSatellite.mappedUnicable
-      });
       setIsEquipmentDialogOpen(true);
     }
   };
 
-  const handleSaveEquipment = async () => {
+  const handleSaveEquipmentMapping = async (mappings: { lnbId: string; switchIds: string[]; motorId: string; unicableId: string }) => {
     if (!selectedSatellite) return;
 
-    setIsSavingEquipment(true);
-    try {
-      const updatedSatellite = {
-        ...selectedSatellite,
-        mappedLnb: formData.mappedLnb || "",
-        mappedSwitch: formData.mappedSwitch || "",
-        mappedMotor: formData.mappedMotor || "",
-        mappedUnicable: formData.mappedUnicable || ""
-      };
-      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-      setSelectedSatellite(updatedSatellite);
-      loadSatellites();
-      setIsEquipmentDialogOpen(false);
-      toast({ title: "Equipment Updated", description: "Equipment mappings have been saved." });
-    } finally {
-      setIsSavingEquipment(false);
-    }
+    const updatedSatellite = {
+      ...selectedSatellite,
+      mappedLnb: mappings.lnbId || (allLnbs.length > 0 ? allLnbs[0].id : ""),
+      mappedSwitch: mappings.switchIds.join(','),
+      mappedMotor: mappings.motorId,
+      mappedUnicable: mappings.unicableId
+    };
+    await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+    setSelectedSatellite(updatedSatellite);
+    loadSatellites();
   };
 
   const getEquipmentName = (type: string, id: string) => {
     const lists: Record<string, any[]> = { lnb: allLnbs, switch: allSwitches, motor: allMotors, unicable: allUnicables };
     const item = lists[type]?.find(i => i.id === id);
     if (!item) return "-";
-    // For types without name field, display type info
     if (type === 'switch') return item.switchType || "-";
     if (type === 'motor') return item.motorType || "-";
     if (type === 'unicable') return item.unicableType || "-";
@@ -541,12 +525,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleAdd} className="bg-primary hover:bg-primary-hover">
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90">
               <Plus className="mr-2 h-4 w-4" />
               Add Satellite
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader className="pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
                 <Satellite className="h-5 w-5 text-primary" />
@@ -554,29 +538,25 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Satellite Name *</Label>
+              <InlineFormField label="Name" required>
                 <Input ref={nameRef} value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., ASTRA 2E/2F/2G" />
-              </div>
-              <div className="space-y-2">
-                <Label>Position *</Label>
+              </InlineFormField>
+              <InlineFormField label="Position" required>
                 <Input value={formData.position || ""} onChange={(e) => setFormData({ ...formData, position: e.target.value })} placeholder="e.g., 28.2°E" />
-              </div>
-              <div className="space-y-2">
-                <Label>Direction</Label>
+              </InlineFormField>
+              <InlineFormField label="Direction">
                 <Select value={formData.direction || ""} onValueChange={(value) => setFormData({ ...formData, direction: value })}>
                   <SelectTrigger><SelectValue placeholder="Select direction" /></SelectTrigger>
                   <SelectContent>{directions.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}</SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Status/Age</Label>
+              </InlineFormField>
+              <InlineFormField label="Status/Age">
                 <Input value={formData.age || ""} onChange={(e) => setFormData({ ...formData, age: e.target.value })} placeholder="e.g., Active since 2010" />
-              </div>
+              </InlineFormField>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary-hover">
+              <Button onClick={handleSave} disabled={isSaving}>
                 {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <>{editingSatellite ? "Update" : "Add"} Satellite</>}
               </Button>
             </div>
@@ -676,7 +656,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                     </div>
                     <div className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span className="text-sm">Switch: {getEquipmentName('switch', selectedSatellite.mappedSwitch)}</span>
+                      <span className="text-sm">Switch: {selectedSatellite.mappedSwitch ? selectedSatellite.mappedSwitch.split(',').map(id => getEquipmentName('switch', id)).join(', ') : '-'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <RotateCcw className="h-4 w-4 text-primary" />
@@ -766,23 +746,9 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                             Showing {(carrierPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(carrierPage * ITEMS_PER_PAGE, getFilteredCarriers().length)} of {getFilteredCarriers().length} carriers
                           </p>
                           <div className="flex items-center gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => setCarrierPage(p => Math.max(1, p - 1))}
-                              disabled={carrierPage === 1}
-                            >
-                              Previous
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setCarrierPage(p => Math.max(1, p - 1))} disabled={carrierPage === 1}>Previous</Button>
                             <span className="text-sm">Page {carrierPage} of {getTotalCarrierPages()}</span>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => setCarrierPage(p => Math.min(getTotalCarrierPages(), p + 1))}
-                              disabled={carrierPage >= getTotalCarrierPages()}
-                            >
-                              Next
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setCarrierPage(p => Math.min(getTotalCarrierPages(), p + 1))} disabled={carrierPage >= getTotalCarrierPages()}>Next</Button>
                           </div>
                         </div>
                       )}
@@ -799,12 +765,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                           {selectedCarrier && (
                             <div className="relative flex-1 max-w-xs">
                               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                              <Input
-                                placeholder="Filter services..."
-                                value={serviceFilter}
-                                onChange={(e) => setServiceFilter(e.target.value)}
-                                className="pl-9"
-                              />
+                              <Input placeholder="Filter services..." value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="pl-9" />
                             </div>
                           )}
                         </div>
@@ -870,14 +831,38 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
           <DialogHeader className="pb-4 border-b">
             <DialogTitle>{editingCarrier ? "Edit Carrier" : "Add New Carrier"}</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2"><Label>Carrier Name *</Label><Input ref={carrierNameRef} value={carrierFormData.name || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, name: e.target.value })} placeholder="e.g., BBC Multiplex 1" /></div>
-            <div className="space-y-2"><Label>Frequency (MHz) *</Label><Input value={carrierFormData.frequency || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, frequency: e.target.value })} placeholder="e.g., 10773" /></div>
-            <div className="space-y-2"><Label>Polarization</Label><Select value={carrierFormData.polarization || "Horizontal"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, polarization: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Symbol Rate</Label><Input value={carrierFormData.symbolRate || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, symbolRate: e.target.value })} placeholder="e.g., 22000" /></div>
-            <div className="space-y-2"><Label>FEC</Label><Select value={carrierFormData.fec || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fec: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fecOptions.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>FEC Mode</Label><Select value={carrierFormData.fecMode || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fecMode: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fecModes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-            <div className="col-span-2 flex items-center gap-2"><Checkbox checked={carrierFormData.factoryDefault || false} onCheckedChange={(c) => setCarrierFormData({ ...carrierFormData, factoryDefault: !!c })} /><Label>Factory Default</Label></div>
+          <div className="space-y-4 py-4">
+            <InlineFormField label="Carrier Name" required>
+              <Input ref={carrierNameRef} value={carrierFormData.name || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, name: e.target.value })} placeholder="e.g., BBC Multiplex 1" />
+            </InlineFormField>
+            <InlineFormField label="Frequency (MHz)" required>
+              <Input value={carrierFormData.frequency || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, frequency: e.target.value })} placeholder="e.g., 10773" />
+            </InlineFormField>
+            <InlineFormField label="Polarization">
+              <Select value={carrierFormData.polarization || "Horizontal"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, polarization: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+              </Select>
+            </InlineFormField>
+            <InlineFormField label="Symbol Rate">
+              <Input value={carrierFormData.symbolRate || ""} onChange={(e) => setCarrierFormData({ ...carrierFormData, symbolRate: e.target.value })} placeholder="e.g., 22000" />
+            </InlineFormField>
+            <InlineFormField label="FEC">
+              <Select value={carrierFormData.fec || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fec: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{fecOptions.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+              </Select>
+            </InlineFormField>
+            <InlineFormField label="FEC Mode">
+              <Select value={carrierFormData.fecMode || "Auto"} onValueChange={(v) => setCarrierFormData({ ...carrierFormData, fecMode: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{fecModes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              </Select>
+            </InlineFormField>
+            <div className="flex items-center gap-3 pl-[132px]">
+              <Checkbox checked={carrierFormData.factoryDefault || false} onCheckedChange={(c) => setCarrierFormData({ ...carrierFormData, factoryDefault: !!c })} />
+              <span className="text-sm">Factory Default</span>
+            </div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsCarrierDialogOpen(false)}>Cancel</Button>
@@ -892,18 +877,40 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
           <DialogHeader className="pb-4 border-b">
             <DialogTitle>{editingService ? "Edit Service" : "Add New Service"}</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2"><Label>Service Name *</Label><Input ref={serviceNameRef} value={serviceFormData.name || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} placeholder="e.g., BBC One HD" /></div>
-            <div className="space-y-2"><Label>Frequency</Label><Input value={serviceFormData.frequency || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, frequency: e.target.value })} placeholder="e.g., 10773" /></div>
-            <div className="space-y-2"><Label>Video PID</Label><Input value={serviceFormData.videoPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, videoPid: e.target.value })} placeholder="e.g., 5500" /></div>
-            <div className="space-y-2"><Label>Audio PID</Label><Input value={serviceFormData.audioPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, audioPid: e.target.value })} placeholder="e.g., 5501" /></div>
-            <div className="space-y-2"><Label>PCR PID</Label><Input value={serviceFormData.pcrPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, pcrPid: e.target.value })} placeholder="e.g., 5500" /></div>
-            <div className="space-y-2"><Label>Program Number</Label><Input value={serviceFormData.programNumber || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, programNumber: e.target.value })} placeholder="e.g., 6940" /></div>
-            <div className="space-y-2"><Label>FAV Group</Label><Input value={serviceFormData.favGroup || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, favGroup: e.target.value })} placeholder="e.g., Entertainment" /></div>
-            <div className="space-y-2"><Label>Preference</Label><Input value={serviceFormData.preference || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, preference: e.target.value })} placeholder="e.g., 1" /></div>
-            <div className="space-y-2 flex flex-col gap-3">
-              <div className="flex items-center gap-2"><Checkbox checked={serviceFormData.factoryDefault || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, factoryDefault: !!c })} /><Label>Factory Default</Label></div>
-              <div className="flex items-center gap-2"><Checkbox checked={serviceFormData.scramble || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, scramble: !!c })} /><Label>Scramble</Label></div>
+          <div className="space-y-4 py-4">
+            <InlineFormField label="Service Name" required>
+              <Input ref={serviceNameRef} value={serviceFormData.name || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} placeholder="e.g., BBC One HD" />
+            </InlineFormField>
+            <InlineFormField label="Frequency">
+              <Input value={serviceFormData.frequency || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, frequency: e.target.value })} placeholder="e.g., 10773" />
+            </InlineFormField>
+            <InlineFormField label="Video PID">
+              <Input value={serviceFormData.videoPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, videoPid: e.target.value })} placeholder="e.g., 5500" />
+            </InlineFormField>
+            <InlineFormField label="Audio PID">
+              <Input value={serviceFormData.audioPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, audioPid: e.target.value })} placeholder="e.g., 5501" />
+            </InlineFormField>
+            <InlineFormField label="PCR PID">
+              <Input value={serviceFormData.pcrPid || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, pcrPid: e.target.value })} placeholder="e.g., 5500" />
+            </InlineFormField>
+            <InlineFormField label="Program Number">
+              <Input value={serviceFormData.programNumber || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, programNumber: e.target.value })} placeholder="e.g., 6940" />
+            </InlineFormField>
+            <InlineFormField label="FAV Group">
+              <Input value={serviceFormData.favGroup || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, favGroup: e.target.value })} placeholder="e.g., Entertainment" />
+            </InlineFormField>
+            <InlineFormField label="Preference">
+              <Input value={serviceFormData.preference || ""} onChange={(e) => setServiceFormData({ ...serviceFormData, preference: e.target.value })} placeholder="e.g., 1" />
+            </InlineFormField>
+            <div className="flex items-center gap-6 pl-[132px]">
+              <div className="flex items-center gap-2">
+                <Checkbox checked={serviceFormData.factoryDefault || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, factoryDefault: !!c })} />
+                <span className="text-sm">Factory Default</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox checked={serviceFormData.scramble || false} onCheckedChange={(c) => setServiceFormData({ ...serviceFormData, scramble: !!c })} />
+                <span className="text-sm">Scramble</span>
+              </div>
             </div>
           </div>
           <div className="flex justify-end space-x-2 pt-4 border-t">
@@ -913,25 +920,18 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         </DialogContent>
       </Dialog>
 
-      {/* Equipment Mapping Dialog */}
-      <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader className="pb-4 border-b">
-            <DialogTitle className="flex items-center gap-2"><Settings className="h-5 w-5" /> Equipment Mapping</DialogTitle>
-            <DialogDescription>Select equipment for this satellite (optional)</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2"><Label>LNB</Label><Select value={formData.mappedLnb || "none"} onValueChange={(v) => setFormData({ ...formData, mappedLnb: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Switch</Label><Select value={formData.mappedSwitch || "none"} onValueChange={(v) => setFormData({ ...formData, mappedSwitch: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType || `Switch ${s.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Motor</Label><Select value={formData.mappedMotor || "none"} onValueChange={(v) => setFormData({ ...formData, mappedMotor: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType || `Motor ${m.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Unicable</Label><Select value={formData.mappedUnicable || "none"} onValueChange={(v) => setFormData({ ...formData, mappedUnicable: v === "none" ? "" : v })}><SelectTrigger><SelectValue placeholder="Select Unicable" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allUnicables.map(u => <SelectItem key={u.id} value={u.id}>{u.unicableType || `Unicable ${u.id.slice(-4)}`}</SelectItem>)}</SelectContent></Select></div>
-          </div>
-          <div className="flex justify-end space-x-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => setIsEquipmentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveEquipment} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save"}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* XXL Equipment Mapping Modal */}
+      <EquipmentMappingModal
+        open={isEquipmentDialogOpen}
+        onOpenChange={setIsEquipmentDialogOpen}
+        satellite={selectedSatellite}
+        onSave={handleSaveEquipmentMapping}
+        allLnbs={allLnbs}
+        allSwitches={allSwitches}
+        allMotors={allMotors}
+        allUnicables={allUnicables}
+        onEquipmentUpdate={loadEquipment}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
