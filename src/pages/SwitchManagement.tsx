@@ -10,6 +10,7 @@ import { Plus, Zap, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
+import InlineFormField from "@/components/InlineFormField";
 
 interface SwitchDevice {
   id: string;
@@ -195,24 +196,21 @@ const SwitchManagement = ({ username }: SwitchManagementProps) => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="switchType">Switch Type *</Label>
+              <InlineFormField label="Switch Type" required>
                 <Select
                   value={formData.switchType || ""}
                   onValueChange={(value) => setFormData({ ...formData, switchType: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select switch type" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select switch type" /></SelectTrigger>
                   <SelectContent>
                     {switchTypes.map((type) => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </InlineFormField>
               
-              <div className="space-y-2">
+              <div className="space-y-2 pl-[132px]">
                 <Label>Switch Options</Label>
                 <div className="flex gap-2">
                   <Input

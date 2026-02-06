@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Activity, Loader2, X, Trash2 } from "lucide-react";
+import { Plus, Activity, Loader2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
+import InlineFormField from "@/components/InlineFormField";
 
 interface IFSlot {
   slotNumber: number;
@@ -227,8 +228,7 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="unicableType">Unicable Type *</Label>
+              <InlineFormField label="Type" required>
                 <Select
                   value={formData.unicableType || "DSCR"}
                   onValueChange={(value) => setFormData({ 
@@ -237,58 +237,48 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
                     port: value === "DCSS" ? "" : formData.port
                   })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select unicable type" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select unicable type" /></SelectTrigger>
                   <SelectContent>
                     {unicableTypes.map((type) => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </InlineFormField>
               
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
+              <InlineFormField label="Status">
                 <Select
                   value={formData.status || "OFF"}
                   onValueChange={(value) => setFormData({ ...formData, status: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {statusOptions.map((status) => (
                       <SelectItem key={status} value={status}>{status}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </InlineFormField>
               
-              {/* Port - only shown for DSCR type */}
               {formData.unicableType === "DSCR" && (
-                <div className="space-y-2">
-                  <Label htmlFor="port">Port</Label>
+                <InlineFormField label="Port">
                   <Select
                     value={formData.port || "None"}
                     onValueChange={(value) => setFormData({ ...formData, port: value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select port" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select port" /></SelectTrigger>
                     <SelectContent>
                       {portOptions.map((port) => (
                         <SelectItem key={port} value={port}>{port}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </InlineFormField>
               )}
               
-              {/* IF Frequency Slots */}
-              <div className="space-y-2">
+              <div className="space-y-2 pl-[132px]">
                 <div className="flex items-center justify-between">
-                  <Label>IF Frequency Slots</Label>
+                  <Label>IF Frequency Slots ({(formData.ifSlots || []).length}/32)</Label>
                   <Button 
                     type="button" 
                     variant="outline" 
@@ -299,7 +289,6 @@ const UnicableManagement = ({ username }: UnicableManagementProps) => {
                     <Plus className="h-4 w-4 mr-1" /> Add Slot
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Add up to 32 IF frequency slots</p>
                 
                 {(formData.ifSlots || []).length > 0 && (
                   <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">

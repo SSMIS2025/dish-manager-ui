@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Radio, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
+import InlineFormField from "@/components/InlineFormField";
 
 interface LNBDevice {
   id: string;
@@ -210,116 +210,94 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Device Name *</Label>
+              <InlineFormField label="Name" required>
                 <Input
                   ref={nameRef}
-                  id="name"
                   value={formData.name || ""}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Universal Ku-Band LNB"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bandType">Band Type</Label>
+              </InlineFormField>
+              <InlineFormField label="Band Type">
                 <Select
                   value={formData.bandType || ""}
                   onValueChange={(value) => setFormData({ ...formData, bandType: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select band type" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select band type" /></SelectTrigger>
                   <SelectContent>
                     {bandTypes.map((band) => (
                       <SelectItem key={band} value={band}>{band}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="powerControl">LNB Power Control</Label>
+              </InlineFormField>
+              <InlineFormField label="Power Control">
                 <Select
                   value={formData.powerControl || "Auto"}
                   onValueChange={(value) => setFormData({ ...formData, powerControl: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {powerControls.map((ctrl) => (
                       <SelectItem key={ctrl} value={ctrl}>{ctrl}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="vControl">V-Control</Label>
+              </InlineFormField>
+              <InlineFormField label="V-Control">
                 <Select
                   value={formData.vControl || "Enabled"}
                   onValueChange={(value) => setFormData({ ...formData, vControl: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {vControls.map((ctrl) => (
                       <SelectItem key={ctrl} value={ctrl}>{ctrl}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="khzOption">22KHz Option</Label>
+              </InlineFormField>
+              <InlineFormField label="22KHz Option">
                 <Select
                   value={formData.khzOption || "Auto"}
                   onValueChange={(value) => setFormData({ ...formData, khzOption: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {khzOptions.map((opt) => (
                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lowFrequency">Low Frequency (MHz)</Label>
+              </InlineFormField>
+              <InlineFormField label="Low Freq (MHz)">
                 <Input
-                  id="lowFrequency"
                   value={formData.lowFrequency || ""}
                   onChange={(e) => setFormData({ ...formData, lowFrequency: e.target.value })}
                   placeholder="e.g., 9750"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="highFrequency">High Frequency (MHz)</Label>
+              </InlineFormField>
+              <InlineFormField label="High Freq (MHz)">
                 <Input
-                  id="highFrequency"
                   value={formData.highFrequency || ""}
                   onChange={(e) => setFormData({ ...formData, highFrequency: e.target.value })}
                   placeholder="e.g., 10600"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lo1High">LO1(H) (MHz)</Label>
+              </InlineFormField>
+              <InlineFormField label="LO1(H) (MHz)">
                 <Input
-                  id="lo1High"
                   value={formData.lo1High || ""}
                   onChange={(e) => setFormData({ ...formData, lo1High: e.target.value })}
                   placeholder="e.g., 10600"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lo1Low">LO1(L) (MHz)</Label>
+              </InlineFormField>
+              <InlineFormField label="LO1(L) (MHz)">
                 <Input
-                  id="lo1Low"
                   value={formData.lo1Low || ""}
                   onChange={(e) => setFormData({ ...formData, lo1Low: e.target.value })}
                   placeholder="e.g., 9750"
                 />
-              </div>
+              </InlineFormField>
             </div>
             <div className="flex justify-end space-x-2 pt-4 border-t sticky bottom-0 bg-background/95 backdrop-blur-sm">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
