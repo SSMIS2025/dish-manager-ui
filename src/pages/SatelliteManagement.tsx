@@ -61,7 +61,6 @@ interface SatelliteData {
   mappedLnb: string;
   mappedSwitch: string;
   mappedMotor: string;
-  mappedUnicable: string;
 }
 
 interface SatelliteManagementProps {
@@ -182,8 +181,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         carriers: sat.carriers || [],
         mappedLnb: sat.mappedLnb || "",
         mappedSwitch: sat.mappedSwitch || "",
-        mappedMotor: sat.mappedMotor || "",
-        mappedUnicable: sat.mappedUnicable || ""
+        mappedMotor: sat.mappedMotor || ""
       }));
       setSatellites(satelliteData);
     } finally {
@@ -307,8 +305,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         carriers: formData.carriers || [],
         mappedLnb: formData.mappedLnb || "",
         mappedSwitch: formData.mappedSwitch || "",
-        mappedMotor: formData.mappedMotor || "",
-        mappedUnicable: formData.mappedUnicable || ""
+        mappedMotor: formData.mappedMotor || ""
       };
 
       if (editingSatellite) {
@@ -478,15 +475,14 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     }
   };
 
-  const handleSaveEquipmentMapping = async (mappings: { lnbId: string; switchIds: string[]; motorId: string; unicableId: string }) => {
+  const handleSaveEquipmentMapping = async (mappings: { lnbId: string; switchIds: string[]; motorId: string }) => {
     if (!selectedSatellite) return;
 
     const updatedSatellite = {
       ...selectedSatellite,
       mappedLnb: mappings.lnbId || (allLnbs.length > 0 ? allLnbs[0].id : ""),
       mappedSwitch: mappings.switchIds.join(','),
-      mappedMotor: mappings.motorId,
-      mappedUnicable: mappings.unicableId
+      mappedMotor: mappings.motorId
     };
     await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
     setSelectedSatellite(updatedSatellite);
@@ -494,12 +490,11 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   };
 
   const getEquipmentName = (type: string, id: string) => {
-    const lists: Record<string, any[]> = { lnb: allLnbs, switch: allSwitches, motor: allMotors, unicable: allUnicables };
+    const lists: Record<string, any[]> = { lnb: allLnbs, switch: allSwitches, motor: allMotors };
     const item = lists[type]?.find(i => i.id === id);
     if (!item) return "-";
     if (type === 'switch') return item.switchType || "-";
     if (type === 'motor') return item.motorType || "-";
-    if (type === 'unicable') return item.unicableType || "-";
     return item.name || "-";
   };
 
@@ -649,7 +644,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                   </div>
 
                   {/* Equipment Summary */}
-                  <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+                  <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Radio className="h-4 w-4 text-primary" />
                       <span className="text-sm">LNB: {getEquipmentName('lnb', selectedSatellite.mappedLnb)}</span>
@@ -661,10 +656,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                     <div className="flex items-center gap-2">
                       <RotateCcw className="h-4 w-4 text-primary" />
                       <span className="text-sm">Motor: {getEquipmentName('motor', selectedSatellite.mappedMotor)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-primary" />
-                      <span className="text-sm">Unicable: {getEquipmentName('unicable', selectedSatellite.mappedUnicable)}</span>
                     </div>
                   </div>
 
@@ -929,7 +920,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         allLnbs={allLnbs}
         allSwitches={allSwitches}
         allMotors={allMotors}
-        allUnicables={allUnicables}
         onEquipmentUpdate={loadEquipment}
       />
 

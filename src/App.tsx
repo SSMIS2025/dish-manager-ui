@@ -17,6 +17,7 @@ import SatelliteManagement from "./pages/SatelliteManagement";
 import ProjectMapping from "./pages/ProjectMapping";
 import ProjectBuilds from "./pages/ProjectBuilds";
 import CreateProjectFromBin from "./pages/CreateProjectFromBin";
+import ProjectReport from "./pages/ProjectReport";
 import AdminActivity from "./pages/AdminActivity";
 import NotFound from "./pages/NotFound";
 import { storageService } from "./services/storageService";
@@ -181,6 +182,7 @@ const App = () => {
                   <Route path="/satellite" element={<SatelliteManagement username={user.username} />} />
                   <Route path="/project-mapping" element={<ProjectMapping username={user.username} />} />
                   <Route path="/project-builds" element={<ProjectBuilds />} />
+                  <Route path="/project-report" element={<ProjectReport />} />
                   <Route path="/create-from-bin" element={<CreateProjectFromBin username={user.username} />} />
                   {user.isAdmin && (
                     <Route path="/admin/activity" element={<AdminActivity />} />
