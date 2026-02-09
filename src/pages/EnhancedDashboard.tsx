@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -20,6 +21,7 @@ interface DashboardProps {
 }
 
 const EnhancedDashboard = ({ username }: DashboardProps) => {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -280,8 +282,9 @@ const EnhancedDashboard = ({ username }: DashboardProps) => {
               {projects.map((project, index) => (
                 <div 
                   key={project.id} 
-                  className="p-4 border rounded-lg bg-card hover:shadow-md transition-all duration-200 animate-fade-in hover:scale-105"
+                  className="p-4 border rounded-lg bg-card hover:shadow-md transition-all duration-200 animate-fade-in hover:scale-105 cursor-pointer"
                   style={{ animationDelay: `${0.7 + index * 0.1}s` }}
+                  onClick={() => navigate('/project-mapping')}
                 >
                   <h3 className="font-semibold text-lg mb-2">{project.name}</h3>
                   <p className="text-sm text-muted-foreground mb-3">{project.description}</p>

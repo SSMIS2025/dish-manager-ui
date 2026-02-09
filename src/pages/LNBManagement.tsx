@@ -38,10 +38,24 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
   
   const nameRef = useRef<HTMLInputElement>(null);
 
-  const bandTypes = ["C-Band", "Ku-Band", "Ka-Band", "L-Band"];
-  const powerControls = ["Auto", "13V", "18V", "Off"];
-  const vControls = ["Enabled", "Disabled"];
-  const khzOptions = ["Auto", "On", "Off"];
+  const bandTypes = ["NONE", "C-Band", "Ku-Band", "Ka-Band", "L-Band"];
+  const powerControls = ["NONE", "Auto", "13V", "18V", "Off"];
+  const vControls = ["NONE", "Enabled", "Disabled"];
+  const khzOptions = ["NONE", "Auto", "On", "Off"];
+
+  // Default frequencies by band type
+  const bandDefaults: Record<string, { lowFrequency: string; highFrequency: string }> = {
+    "C-Band": { lowFrequency: "3400", highFrequency: "4200" },
+    "Ku-Band": { lowFrequency: "10700", highFrequency: "12750" },
+    "Ka-Band": { lowFrequency: "18300", highFrequency: "20200" },
+    "L-Band": { lowFrequency: "950", highFrequency: "2150" },
+    "NONE": { lowFrequency: "", highFrequency: "" },
+  };
+
+  const handleBandTypeChange = (value: string) => {
+    const defaults = bandDefaults[value] || { lowFrequency: "", highFrequency: "" };
+    setFormData({ ...formData, bandType: value, lowFrequency: defaults.lowFrequency, highFrequency: defaults.highFrequency });
+  };
 
   useEffect(() => {
     loadDevices();
@@ -71,7 +85,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
 
   const handleAdd = () => {
     setEditingDevice(null);
-    setFormData({});
+    setFormData({ bandType: "NONE", powerControl: "NONE", vControl: "NONE", khzOption: "NONE" });
     setIsDialogOpen(true);
     setTimeout(() => nameRef.current?.focus(), 100);
   };
@@ -220,8 +234,8 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               </InlineFormField>
               <InlineFormField label="Band Type">
                 <Select
-                  value={formData.bandType || ""}
-                  onValueChange={(value) => setFormData({ ...formData, bandType: value })}
+                  value={formData.bandType || "NONE"}
+                  onValueChange={handleBandTypeChange}
                 >
                   <SelectTrigger><SelectValue placeholder="Select band type" /></SelectTrigger>
                   <SelectContent>
@@ -233,7 +247,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               </InlineFormField>
               <InlineFormField label="Power Control">
                 <Select
-                  value={formData.powerControl || "Auto"}
+                  value={formData.powerControl || "NONE"}
                   onValueChange={(value) => setFormData({ ...formData, powerControl: value })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -246,7 +260,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               </InlineFormField>
               <InlineFormField label="V-Control">
                 <Select
-                  value={formData.vControl || "Enabled"}
+                  value={formData.vControl || "NONE"}
                   onValueChange={(value) => setFormData({ ...formData, vControl: value })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -259,7 +273,7 @@ const LNBManagement = ({ username }: LNBManagementProps) => {
               </InlineFormField>
               <InlineFormField label="22KHz Option">
                 <Select
-                  value={formData.khzOption || "Auto"}
+                  value={formData.khzOption || "NONE"}
                   onValueChange={(value) => setFormData({ ...formData, khzOption: value })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
