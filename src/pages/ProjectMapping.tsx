@@ -80,6 +80,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   // Satellite detail dialog
   const [selectedSatelliteDetail, setSelectedSatelliteDetail] = useState<any>(null);
   const [isSatelliteDialogOpen, setIsSatelliteDialogOpen] = useState(false);
+  const [satEditData, setSatEditData] = useState<any>(null);
+  const [isSavingSatellite, setIsSavingSatellite] = useState(false);
   
   // Report dialog
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
@@ -240,6 +242,64 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     } finally {
       setIsUpdatingEquipment(false);
     }
+  };
+
+  // Satellite edit handler
+  const handleOpenSatelliteEdit = (sat: any) => {
+    setSelectedSatelliteDetail(sat);
+    setSatEditData(JSON.parse(JSON.stringify(sat))); // deep clone
+    setIsSatelliteDialogOpen(true);
+  };
+
+  const handleSaveSatelliteEdit = async () => {
+    if (!satEditData) return;
+    setIsSavingSatellite(true);
+    try {
+      await apiService.updateSatellite(satEditData.id, satEditData);
+      toast({ title: "Updated", description: "Satellite updated successfully." });
+      setIsSatelliteDialogOpen(false);
+      loadAllEquipment();
+    } catch {
+      toast({ title: "Error", description: "Failed to update satellite.", variant: "destructive" });
+    } finally {
+      setIsSavingSatellite(false);
+    }
+  };
+
+  const addCarrierToSatEdit = () => {
+    const newCarrier = { id: `c-${Date.now()}`, name: "", frequency: "", polarization: "", symbolRate: "", fec: "", services: [] };
+    setSatEditData({ ...satEditData, carriers: [...(satEditData.carriers || []), newCarrier] });
+  };
+
+  const removeCarrierFromSatEdit = (idx: number) => {
+    setSatEditData({ ...satEditData, carriers: (satEditData.carriers || []).filter((_: any, i: number) => i !== idx) });
+  };
+
+  const updateCarrierInSatEdit = (idx: number, field: string, value: any) => {
+    const carriers = [...(satEditData.carriers || [])];
+    carriers[idx] = { ...carriers[idx], [field]: value };
+    setSatEditData({ ...satEditData, carriers });
+  };
+
+  const addServiceToCarrier = (carrierIdx: number) => {
+    const carriers = [...(satEditData.carriers || [])];
+    const newService = { id: `s-${Date.now()}`, name: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "" };
+    carriers[carrierIdx] = { ...carriers[carrierIdx], services: [...(carriers[carrierIdx].services || []), newService] };
+    setSatEditData({ ...satEditData, carriers });
+  };
+
+  const removeServiceFromCarrier = (carrierIdx: number, serviceIdx: number) => {
+    const carriers = [...(satEditData.carriers || [])];
+    carriers[carrierIdx] = { ...carriers[carrierIdx], services: carriers[carrierIdx].services.filter((_: any, i: number) => i !== serviceIdx) };
+    setSatEditData({ ...satEditData, carriers });
+  };
+
+  const updateServiceInCarrier = (carrierIdx: number, serviceIdx: number, field: string, value: any) => {
+    const carriers = [...(satEditData.carriers || [])];
+    const services = [...carriers[carrierIdx].services];
+    services[serviceIdx] = { ...services[serviceIdx], [field]: value };
+    carriers[carrierIdx] = { ...carriers[carrierIdx], services };
+    setSatEditData({ ...satEditData, carriers });
   };
 
   // Filter functions
@@ -495,8 +555,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (type === 'satellites') {
-                    setSelectedSatelliteDetail(item);
-                    setIsSatelliteDialogOpen(true);
+                    handleOpenSatelliteEdit(item);
                   } else if (isEditing) {
                     setEditingItem(null);
                     setEditingType("");
@@ -899,89 +958,143 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </Card>
       )}
 
-      {/* Satellite Detail Dialog */}
+      {/* Satellite Edit Dialog */}
       <Dialog open={isSatelliteDialogOpen} onOpenChange={setIsSatelliteDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <Satellite className="h-5 w-5 text-primary" />
-              {selectedSatelliteDetail?.name} - Full Details
+              Edit Satellite - {satEditData?.name || ''}
             </DialogTitle>
           </DialogHeader>
-          {selectedSatelliteDetail && (
-            <ScrollArea className="h-[65vh]">
+          {satEditData && (
+            <ScrollArea className="h-[70vh]">
               <div className="space-y-4 pr-4">
                 {/* Basic Info */}
-                <div className="grid grid-cols-3 gap-4 p-4 bg-muted/30 rounded-lg">
-                  <div><span className="text-sm text-muted-foreground">Position:</span><p className="font-medium">{selectedSatelliteDetail.position || 'N/A'}</p></div>
-                  <div><span className="text-sm text-muted-foreground">Direction:</span><p className="font-medium">{selectedSatelliteDetail.direction || 'N/A'}</p></div>
-                  <div><span className="text-sm text-muted-foreground">Status:</span><p className="font-medium">{selectedSatelliteDetail.age || 'N/A'}</p></div>
-                </div>
+                <Card>
+                  <CardHeader className="py-3"><CardTitle className="text-sm">Satellite Information</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    <InlineFormField label="Name"><Input value={satEditData.name || ""} onChange={(e) => setSatEditData({...satEditData, name: e.target.value})} /></InlineFormField>
+                    <InlineFormField label="Position"><Input value={satEditData.position || ""} onChange={(e) => setSatEditData({...satEditData, position: e.target.value})} /></InlineFormField>
+                    <InlineFormField label="Direction">
+                      <Select value={satEditData.direction || ""} onValueChange={(v) => setSatEditData({...satEditData, direction: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+                      </Select>
+                    </InlineFormField>
+                    <InlineFormField label="Status">
+                      <Select value={satEditData.age || ""} onValueChange={(v) => setSatEditData({...satEditData, age: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent><SelectItem value="New">New</SelectItem><SelectItem value="Old">Old</SelectItem></SelectContent>
+                      </Select>
+                    </InlineFormField>
+                  </CardContent>
+                </Card>
 
                 {/* Equipment Mappings */}
-                <div className="p-4 bg-muted/30 rounded-lg">
-                  <h4 className="font-medium mb-2">Mapped Equipment</h4>
-                  <div className="grid grid-cols-4 gap-3 text-sm">
-                    <div><Radio className="h-4 w-4 text-primary inline mr-1" />LNB: {allLnbs.find(l => l.id === selectedSatelliteDetail.mappedLnb)?.name || 'None'}</div>
-                    <div><Zap className="h-4 w-4 text-primary inline mr-1" />Switch: {selectedSatelliteDetail.mappedSwitch ? selectedSatelliteDetail.mappedSwitch.split(',').map((id: string) => allSwitches.find(s => s.id === id)?.switchType).filter(Boolean).join(', ') : 'None'}</div>
-                    <div><RotateCcw className="h-4 w-4 text-primary inline mr-1" />Motor: {allMotors.find(m => m.id === selectedSatelliteDetail.mappedMotor)?.motorType || 'None'}</div>
-                    <div><Activity className="h-4 w-4 text-primary inline mr-1" />Unicable: {allUnicables.find(u => u.id === selectedSatelliteDetail.mappedUnicable)?.unicableType || 'None'}</div>
-                  </div>
-                </div>
+                <Card>
+                  <CardHeader className="py-3"><CardTitle className="text-sm">Equipment Mappings</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    <InlineFormField label="LNB">
+                      <Select value={satEditData.mappedLnb || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </InlineFormField>
+                    <InlineFormField label="Switch">
+                      <Select value={satEditData.mappedSwitch || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </InlineFormField>
+                    <InlineFormField label="Motor">
+                      <Select value={satEditData.mappedMotor || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </InlineFormField>
+                  </CardContent>
+                </Card>
 
                 {/* Carriers */}
-                <div>
-                  <h4 className="font-medium mb-2">Carriers ({(selectedSatelliteDetail.carriers || []).length})</h4>
-                  {(selectedSatelliteDetail.carriers || []).map((carrier: any, idx: number) => (
-                    <Card key={carrier.id || idx} className="mb-3">
-                      <CardHeader className="py-2 px-4">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-sm">{carrier.name}</CardTitle>
-                          <Badge variant="secondary">{(carrier.services || []).length} services</Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="py-2 px-4">
-                        <div className="grid grid-cols-5 gap-2 text-xs text-muted-foreground mb-2">
-                          <span>Freq: {carrier.frequency || '-'}</span>
-                          <span>Pol: {carrier.polarization || '-'}</span>
-                          <span>SR: {carrier.symbolRate || '-'}</span>
-                          <span>FEC: {carrier.fec || '-'}</span>
-                          <span>Mode: {carrier.fecMode || '-'}</span>
-                        </div>
-                        {(carrier.services || []).length > 0 && (
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="text-xs">
-                                <TableHead className="py-1">Service</TableHead>
-                                <TableHead className="py-1">Video PID</TableHead>
-                                <TableHead className="py-1">Audio PID</TableHead>
-                                <TableHead className="py-1">PCR PID</TableHead>
-                                <TableHead className="py-1">Prog #</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(carrier.services || []).map((service: any, sIdx: number) => (
-                                <TableRow key={service.id || sIdx} className="text-xs">
-                                  <TableCell className="py-1">{service.name}</TableCell>
-                                  <TableCell className="py-1">{service.videoPid || '-'}</TableCell>
-                                  <TableCell className="py-1">{service.audioPid || '-'}</TableCell>
-                                  <TableCell className="py-1">{service.pcrPid || '-'}</TableCell>
-                                  <TableCell className="py-1">{service.programNumber || '-'}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {(selectedSatelliteDetail.carriers || []).length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No carriers configured</p>
-                  )}
-                </div>
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm">Carriers ({(satEditData.carriers || []).length})</CardTitle>
+                      <Button variant="outline" size="sm" onClick={addCarrierToSatEdit}><Plus className="h-3 w-3 mr-1" /> Add Carrier</Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {(satEditData.carriers || []).map((carrier: any, cIdx: number) => (
+                      <Card key={carrier.id || cIdx} className="border">
+                        <CardHeader className="py-2 px-4">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm">{carrier.name || `Carrier ${cIdx + 1}`}</CardTitle>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeCarrierFromSatEdit(cIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <InlineFormField label="Name"><Input value={carrier.name || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'name', e.target.value)} /></InlineFormField>
+                            <InlineFormField label="Frequency"><Input value={carrier.frequency || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'frequency', e.target.value)} /></InlineFormField>
+                            <InlineFormField label="Polarization">
+                              <Select value={carrier.polarization || ""} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'polarization', v)}>
+                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Horizontal">Horizontal</SelectItem><SelectItem value="Vertical">Vertical</SelectItem><SelectItem value="Left">Left</SelectItem><SelectItem value="Right">Right</SelectItem></SelectContent>
+                              </Select>
+                            </InlineFormField>
+                            <InlineFormField label="Symbol Rate"><Input value={carrier.symbolRate || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'symbolRate', e.target.value)} /></InlineFormField>
+                            <InlineFormField label="FEC">
+                              <Select value={carrier.fec || ""} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'fec', v)}>
+                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Auto">Auto</SelectItem><SelectItem value="1/2">1/2</SelectItem><SelectItem value="2/3">2/3</SelectItem><SelectItem value="3/4">3/4</SelectItem><SelectItem value="5/6">5/6</SelectItem><SelectItem value="7/8">7/8</SelectItem></SelectContent>
+                              </Select>
+                            </InlineFormField>
+                          </div>
+
+                          {/* Services */}
+                          <div className="mt-3 border-t pt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium">Services ({(carrier.services || []).length})</span>
+                              <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => addServiceToCarrier(cIdx)}><Plus className="h-3 w-3 mr-1" /> Service</Button>
+                            </div>
+                            {(carrier.services || []).map((svc: any, sIdx: number) => (
+                              <div key={svc.id || sIdx} className="grid grid-cols-6 gap-1 mb-2 items-center">
+                                <Input className="text-xs h-7" placeholder="Name" value={svc.name || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'name', e.target.value)} />
+                                <Input className="text-xs h-7" placeholder="Video PID" value={svc.videoPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'videoPid', e.target.value)} />
+                                <Input className="text-xs h-7" placeholder="Audio PID" value={svc.audioPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'audioPid', e.target.value)} />
+                                <Input className="text-xs h-7" placeholder="PCR PID" value={svc.pcrPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'pcrPid', e.target.value)} />
+                                <Input className="text-xs h-7" placeholder="Prog #" value={svc.programNumber || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'programNumber', e.target.value)} />
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeServiceFromCarrier(cIdx, sIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {(satEditData.carriers || []).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No carriers. Click "Add Carrier" to create one.</p>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </ScrollArea>
           )}
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsSatelliteDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveSatelliteEdit} disabled={isSavingSatellite}>
+              {isSavingSatellite ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2 h-4 w-4" />Save Changes</>}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
