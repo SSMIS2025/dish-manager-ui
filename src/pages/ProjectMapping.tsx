@@ -996,28 +996,28 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   <CardHeader className="py-3"><CardTitle className="text-sm">Equipment Mappings</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
                     <InlineFormField label="LNB">
-                      <Select value={satEditData.mappedLnb || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v})}>
+                      <Select value={satEditData.mappedLnb || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </InlineFormField>
                     <InlineFormField label="Switch">
-                      <Select value={satEditData.mappedSwitch || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v})}>
+                      <Select value={satEditData.mappedSwitch || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </InlineFormField>
                     <InlineFormField label="Motor">
-                      <Select value={satEditData.mappedMotor || ""} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v})}>
+                      <Select value={satEditData.mappedMotor || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}
                         </SelectContent>
                       </Select>
