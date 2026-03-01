@@ -991,37 +991,49 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   </CardContent>
                 </Card>
 
-                {/* Equipment Mappings */}
+                {/* Equipment Mappings - only show items mapped to this build */}
                 <Card>
                   <CardHeader className="py-3"><CardTitle className="text-sm">Equipment Mappings</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
-                    <InlineFormField label="LNB">
-                      <Select value={satEditData.mappedLnb || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v === "none" ? "" : v})}>
-                        <SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {allLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </InlineFormField>
-                    <InlineFormField label="Switch">
-                      <Select value={satEditData.mappedSwitch || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v === "none" ? "" : v})}>
-                        <SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {allSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </InlineFormField>
-                    <InlineFormField label="Motor">
-                      <Select value={satEditData.mappedMotor || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v === "none" ? "" : v})}>
-                        <SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {allMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </InlineFormField>
+                    {(() => {
+                      const mappedLnbIds = buildMappings.filter(m => m.equipmentType === 'lnbs').map(m => m.equipmentId);
+                      const mappedSwitchIds = buildMappings.filter(m => m.equipmentType === 'switches').map(m => m.equipmentId);
+                      const mappedMotorIds = buildMappings.filter(m => m.equipmentType === 'motors').map(m => m.equipmentId);
+                      const filteredLnbs = allLnbs.filter(l => mappedLnbIds.includes(l.id));
+                      const filteredSwitches = allSwitches.filter(s => mappedSwitchIds.includes(s.id));
+                      const filteredMotors = allMotors.filter(m => mappedMotorIds.includes(m.id));
+                      return (
+                        <>
+                          <InlineFormField label="LNB">
+                            <Select value={satEditData.mappedLnb || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v === "none" ? "" : v})}>
+                              <SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {filteredLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </InlineFormField>
+                          <InlineFormField label="Switch">
+                            <Select value={satEditData.mappedSwitch || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v === "none" ? "" : v})}>
+                              <SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {filteredSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </InlineFormField>
+                          <InlineFormField label="Motor">
+                            <Select value={satEditData.mappedMotor || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v === "none" ? "" : v})}>
+                              <SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {filteredMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </InlineFormField>
+                        </>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
 
