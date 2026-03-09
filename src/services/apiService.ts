@@ -702,8 +702,10 @@ class ApiService {
       if (electron) {
         try {
           const result = await electron.database.getActivities();
-          return result.data || [];
-        } catch {
+          // Handle both { data: [...] } and direct array responses
+          return Array.isArray(result) ? result : (result?.data || []);
+        } catch (error) {
+          console.error('Failed to get activities from Electron:', error);
           return [];
         }
       }
