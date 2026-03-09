@@ -68,7 +68,12 @@ const EquipmentMappingModal = ({
     l.name?.toLowerCase().includes(lnbSearch.toLowerCase()) ||
     l.bandType?.toLowerCase().includes(lnbSearch.toLowerCase())
   );
-  const filteredSwitches = allSwitches.filter(s =>
+  const filteredSwitches = allSwitches.map(s => ({
+    ...s,
+    switchOptions: Array.isArray(s.switchOptions) 
+      ? s.switchOptions 
+      : (typeof s.switchOptions === 'string' ? (() => { try { return JSON.parse(s.switchOptions); } catch { return []; } })() : [])
+  })).filter(s =>
     s.switchType?.toLowerCase().includes(switchSearch.toLowerCase())
   );
   const filteredMotors = allMotors.filter(m =>
