@@ -199,7 +199,14 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         apiService.getEquipment('unicables')
       ]);
       setAllLnbs(lnbs);
-      setAllSwitches(switches);
+      // Ensure switchOptions is always an array
+      const parsedSwitches = (switches || []).map((s: any) => ({
+        ...s,
+        switchOptions: Array.isArray(s.switchOptions) 
+          ? s.switchOptions 
+          : (typeof s.switchOptions === 'string' ? (() => { try { return JSON.parse(s.switchOptions); } catch { return []; } })() : [])
+      }));
+      setAllSwitches(parsedSwitches);
       setAllMotors(motors);
       setAllUnicables(unicables);
     } finally {

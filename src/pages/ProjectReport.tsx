@@ -17,11 +17,13 @@ import InlineFormField from "@/components/InlineFormField";
 const ProjectReport = () => {
   const { toast } = useToast();
   const [projects, setProjects] = useState<any[]>([]);
+  const [configuredProjects, setConfiguredProjects] = useState<any[]>([]);
   const [builds, setBuilds] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedBuildId, setSelectedBuildId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingBuilds, setIsLoadingBuilds] = useState(false);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   // Equipment & mappings
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
@@ -51,8 +53,28 @@ const ProjectReport = () => {
   }, [selectedBuildId]);
 
   const loadProjects = async () => {
-    const data = await apiService.getProjects();
-    setProjects(data || []);
+    setIsLoadingProjects(true);
+    try {
+      const data = await apiService.getProjects();
+      const allProjects = data || [];
+      setProjects(allProjects);
+      
+      // Filter to only projects that have at least one build
+      const projectsWithBuilds: any[] = [];
+      for (const project of allProjects) {
+        try {
+          const projectBuilds = await apiService.getProjectBuilds(project.id);
+          if (projectBuilds && projectBuilds.length > 0) {
+            projectsWithBuilds.push(project);
+          }
+        } catch {
+          // skip
+        }
+      }
+      setConfiguredProjects(projectsWithBuilds);
+    } finally {
+      setIsLoadingProjects(false);
+    }
   };
 
   const loadBuilds = async (projectId: string) => {
@@ -110,6 +132,14 @@ const ProjectReport = () => {
   const selectedBuild = builds.find(b => b.id === selectedBuildId);
   const mapped = getMapped();
 
+  const parseSwitchOptions = (options: any): string[] => {
+    if (Array.isArray(options)) return options;
+    if (typeof options === 'string') {
+      try { return JSON.parse(options); } catch { return []; }
+    }
+    return [];
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -120,7 +150,7 @@ const ProjectReport = () => {
             </div>
             Project Report
           </h2>
-          <p className="text-muted-foreground mt-1">Full details report for selected project and build</p>
+          <p className="text-muted-foreground mt-1">Full details report for configured projects and builds</p>
         </div>
       </div>
 
@@ -131,9 +161,16 @@ const ProjectReport = () => {
             <div className="flex-1 min-w-[200px]">
               <InlineFormField label="Project">
                 <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                  <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select a configured project"} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    {configuredProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    {configuredProjects.length === 0 && !isLoadingProjects && (
+                      <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                        No configured projects found. Create a project with builds first.
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </InlineFormField>
@@ -193,7 +230,17 @@ const ProjectReport = () => {
                   <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Options</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {mapped.switches.map(s => (
-                      <TableRow key={s.id}><TableCell>{s.switchType || '-'}</TableCell><TableCell>{(s.switchOptions || []).join(', ') || '-'}</TableCell></TableRow>
+                      <TableRow key={s.id}>
+                        <TableCell>{s.switchType || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {parseSwitchOptions(s.switchOptions).map((opt: string, idx: number) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">{opt}</Badge>
+                            ))}
+                            {parseSwitchOptions(s.switchOptions).length === 0 && '-'}
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     ))}
                   </TableBody>
                 </Table>
@@ -321,7 +368,7 @@ const ProjectReport = () => {
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
             <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <p>Select a project and build to view the report.</p>
+            <p>{isLoadingProjects ? "Loading projects..." : "Select a configured project and build to view the report."}</p>
           </CardContent>
         </Card>
       )}
