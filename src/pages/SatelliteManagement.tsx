@@ -6,10 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Activity, Loader2, Settings, Search, Filter } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Plus, Satellite, Edit, Trash2, Radio, Zap, RotateCcw, Loader2, Settings, Search, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import InlineFormField from "@/components/InlineFormField";
@@ -72,8 +72,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [satellites, setSatellites] = useState<SatelliteData[]>([]);
   const [selectedSatellite, setSelectedSatellite] = useState<SatelliteData | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isCarrierDialogOpen, setIsCarrierDialogOpen] = useState(false);
-  const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
   const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [editingSatellite, setEditingSatellite] = useState<SatelliteData | null>(null);
   const [formData, setFormData] = useState<Partial<SatelliteData>>({});
@@ -82,31 +80,23 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   
-  // Filter states
   const [satelliteFilter, setSatelliteFilter] = useState("");
-  const [carrierFilter, setCarrierFilter] = useState("");
-  const [serviceFilter, setServiceFilter] = useState("");
-  const [polarizationFilter, setPolarizationFilter] = useState("all");
   
-  // Pagination states
-  const [carrierPage, setCarrierPage] = useState(1);
-  const [servicePage, setServicePage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
-  
-  // Equipment lists for mapping
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
   const [allSwitches, setAllSwitches] = useState<any[]>([]);
   const [allMotors, setAllMotors] = useState<any[]>([]);
   const [allUnicables, setAllUnicables] = useState<any[]>([]);
   
   // Carrier form
-  const [selectedCarrier, setSelectedCarrier] = useState<Carrier | null>(null);
+  const [isCarrierDialogOpen, setIsCarrierDialogOpen] = useState(false);
   const [editingCarrier, setEditingCarrier] = useState<Carrier | null>(null);
   const [carrierFormData, setCarrierFormData] = useState<Partial<Carrier>>({});
   
   // Service form
+  const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceFormData, setServiceFormData] = useState<Partial<Service>>({});
+  const [serviceCarrierId, setServiceCarrierId] = useState<string>("");
 
   const nameRef = useRef<HTMLInputElement>(null);
   const carrierNameRef = useRef<HTMLInputElement>(null);
@@ -122,50 +112,13 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     loadEquipment();
   }, []);
 
-  // Filtered satellites
   const filteredSatellites = satellites.filter(sat => 
     sat.name.toLowerCase().includes(satelliteFilter.toLowerCase()) ||
     sat.position.toLowerCase().includes(satelliteFilter.toLowerCase())
   );
 
-  // Filtered carriers with pagination
-  const getFilteredCarriers = () => {
-    if (!selectedSatellite) return [];
-    return selectedSatellite.carriers.filter(carrier => {
-      const matchesName = carrier.name.toLowerCase().includes(carrierFilter.toLowerCase()) ||
-        carrier.frequency.toLowerCase().includes(carrierFilter.toLowerCase());
-      const matchesPolarization = polarizationFilter === "all" || carrier.polarization === polarizationFilter;
-      return matchesName && matchesPolarization;
-    });
-  };
-
-  const getPaginatedCarriers = () => {
-    const filtered = getFilteredCarriers();
-    const startIndex = (carrierPage - 1) * ITEMS_PER_PAGE;
-    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  };
-
-  const getTotalCarrierPages = () => {
-    return Math.ceil(getFilteredCarriers().length / ITEMS_PER_PAGE);
-  };
-
-  // Filtered services with pagination
-  const getFilteredServices = () => {
-    if (!selectedCarrier) return [];
-    return (selectedCarrier.services || []).filter(service =>
-      service.name.toLowerCase().includes(serviceFilter.toLowerCase()) ||
-      (service.frequency && service.frequency.toLowerCase().includes(serviceFilter.toLowerCase()))
-    );
-  };
-
-  const getPaginatedServices = () => {
-    const filtered = getFilteredServices();
-    const startIndex = (servicePage - 1) * ITEMS_PER_PAGE;
-    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  };
-
-  const getTotalServicePages = () => {
-    return Math.ceil(getFilteredServices().length / ITEMS_PER_PAGE);
+  const getTotalServices = (sat: SatelliteData) => {
+    return sat.carriers.reduce((sum, c) => sum + (c.services?.length || 0), 0);
   };
 
   const loadSatellites = async () => {
@@ -199,7 +152,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         apiService.getEquipment('unicables')
       ]);
       setAllLnbs(lnbs);
-      // Ensure switchOptions is always an array
       const parsedSwitches = (switches || []).map((s: any) => ({
         ...s,
         switchOptions: Array.isArray(s.switchOptions) 
@@ -229,17 +181,13 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
-    
     setIsLoading(true);
     try {
       if (deleteTarget.type === 'satellite') {
         const satellite = satellites.find(s => s.id === deleteTarget.id);
         await apiService.deleteEquipment('satellites', deleteTarget.id);
         await apiService.logActivity(username, "Satellite Deleted", `Deleted satellite: ${satellite?.name}`, 'global');
-        
-        if (selectedSatellite?.id === deleteTarget.id) {
-          setSelectedSatellite(null);
-        }
+        if (selectedSatellite?.id === deleteTarget.id) setSelectedSatellite(null);
         loadSatellites();
         toast({ title: "Satellite Deleted", description: "The satellite and all its carriers/services have been removed." });
       } else if (deleteTarget.type === 'carrier' && selectedSatellite) {
@@ -247,9 +195,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
         await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
         setSelectedSatellite(updatedSatellite);
-        if (selectedCarrier?.id === deleteTarget.id) {
-          setSelectedCarrier(null);
-        }
         loadSatellites();
         toast({ title: "Carrier Deleted", description: "The carrier and all its services have been removed." });
       } else if (deleteTarget.type === 'service' && selectedSatellite && deleteTarget.carrierId) {
@@ -262,9 +207,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
         await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
         setSelectedSatellite(updatedSatellite);
-        if (selectedCarrier?.id === deleteTarget.carrierId) {
-          setSelectedCarrier({ ...selectedCarrier, services: selectedCarrier.services.filter(s => s.id !== deleteTarget.id) });
-        }
         loadSatellites();
         toast({ title: "Service Deleted", description: "The service has been removed." });
       }
@@ -284,24 +226,18 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       toast({ title: "Validation Error", description: "Position is required.", variant: "destructive" });
       return false;
     }
-
-    const isDuplicate = await apiService.checkSatelliteDuplicate(
-      formData.name,
-      editingSatellite?.id
-    );
+    const isDuplicate = await apiService.checkSatelliteDuplicate(formData.name, editingSatellite?.id);
     if (isDuplicate) {
       toast({ title: "Duplicate Name", description: "A satellite with this name already exists.", variant: "destructive" });
       nameRef.current?.focus();
       return false;
     }
-
     return true;
   };
 
   const handleSave = async () => {
     const isValid = await validateSatelliteForm();
     if (!isValid) return;
-
     setIsSaving(true);
     try {
       const satelliteData = {
@@ -314,7 +250,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         mappedSwitch: formData.mappedSwitch || "",
         mappedMotor: formData.mappedMotor || ""
       };
-
       if (editingSatellite) {
         await apiService.updateSatellite(editingSatellite.id, satelliteData);
         await apiService.logActivity(username, "Satellite Updated", `Updated satellite: ${formData.name}`, 'global');
@@ -324,7 +259,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         await apiService.logActivity(username, "Satellite Added", `Added new satellite: ${formData.name}`, 'global');
         toast({ title: "Satellite Added", description: "The new satellite has been successfully added." });
       }
-      
       loadSatellites();
       setIsDialogOpen(false);
       setFormData({});
@@ -335,9 +269,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   const handleSelectSatellite = (satellite: SatelliteData) => {
     setSelectedSatellite(satellite);
-    setSelectedCarrier(null);
-    setCarrierPage(1);
-    setServicePage(1);
   };
 
   // Carrier management
@@ -369,7 +300,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   const handleSaveCarrier = async () => {
     if (!validateCarrierForm() || !selectedSatellite) return;
-
     setIsSaving(true);
     try {
       const newCarrier: Carrier = {
@@ -383,22 +313,18 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         factoryDefault: carrierFormData.factoryDefault || false,
         services: editingCarrier?.services || []
       };
-
       let updatedCarriers: Carrier[];
       if (editingCarrier) {
         updatedCarriers = selectedSatellite.carriers.map(c => c.id === editingCarrier.id ? newCarrier : c);
       } else {
         updatedCarriers = [...selectedSatellite.carriers, newCarrier];
       }
-
       const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
       await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-      
       setSelectedSatellite(updatedSatellite);
       loadSatellites();
       setIsCarrierDialogOpen(false);
       setCarrierFormData({});
-
       toast({ title: editingCarrier ? "Carrier Updated" : "Carrier Added", description: `Carrier "${newCarrier.name}" has been saved.` });
     } finally {
       setIsSaving(false);
@@ -407,7 +333,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Service management
   const handleAddService = (carrier: Carrier) => {
-    setSelectedCarrier(carrier);
+    setServiceCarrierId(carrier.id);
     setEditingService(null);
     setServiceFormData({ factoryDefault: false, scramble: false, frequency: carrier.frequency });
     setIsServiceDialogOpen(true);
@@ -415,7 +341,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   };
 
   const handleEditService = (carrier: Carrier, service: Service) => {
-    setSelectedCarrier(carrier);
+    setServiceCarrierId(carrier.id);
     setEditingService(service);
     setServiceFormData(service);
     setIsServiceDialogOpen(true);
@@ -431,8 +357,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   };
 
   const handleSaveService = async () => {
-    if (!validateServiceForm() || !selectedSatellite || !selectedCarrier) return;
-
+    if (!validateServiceForm() || !selectedSatellite || !serviceCarrierId) return;
     setIsSaving(true);
     try {
       const newService: Service = {
@@ -448,9 +373,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         preference: serviceFormData.preference || "",
         scramble: serviceFormData.scramble || false
       };
-
       const updatedCarriers = selectedSatellite.carriers.map(c => {
-        if (c.id === selectedCarrier.id) {
+        if (c.id === serviceCarrierId) {
           if (editingService) {
             return { ...c, services: c.services.map(s => s.id === editingService.id ? newService : s) };
           }
@@ -458,33 +382,24 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         }
         return c;
       });
-
       const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
       await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
-      
       setSelectedSatellite(updatedSatellite);
-      const updatedCarrier = updatedCarriers.find(c => c.id === selectedCarrier.id);
-      if (updatedCarrier) setSelectedCarrier(updatedCarrier);
       loadSatellites();
       setIsServiceDialogOpen(false);
       setServiceFormData({});
-
       toast({ title: editingService ? "Service Updated" : "Service Added", description: `Service "${newService.name}" has been saved.` });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Equipment mapping with XXL modal
   const handleOpenEquipmentDialog = () => {
-    if (selectedSatellite) {
-      setIsEquipmentDialogOpen(true);
-    }
+    if (selectedSatellite) setIsEquipmentDialogOpen(true);
   };
 
   const handleSaveEquipmentMapping = async (mappings: { lnbId: string; switchIds: string[]; motorId: string }) => {
     if (!selectedSatellite) return;
-
     const updatedSatellite = {
       ...selectedSatellite,
       mappedLnb: mappings.lnbId || (allLnbs.length > 0 ? allLnbs[0].id : ""),
@@ -503,11 +418,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     if (type === 'switch') return item.switchType || "-";
     if (type === 'motor') return item.motorType || "-";
     return item.name || "-";
-  };
-
-  const getTotalServices = () => {
-    if (!selectedSatellite) return 0;
-    return selectedSatellite.carriers.reduce((sum, c) => sum + (c.services?.length || 0), 0);
   };
 
   return (
@@ -547,9 +457,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 <Input value={formData.position || ""} onChange={(e) => setFormData({ ...formData, position: e.target.value })} placeholder="e.g., 28.2°E" />
               </InlineFormField>
               <InlineFormField label="Direction">
-                <Select value={formData.direction || ""} onValueChange={(value) => setFormData({ ...formData, direction: value })}>
+                <Select value={formData.direction || "none"} onValueChange={(value) => setFormData({ ...formData, direction: value === "none" ? "" : value })}>
                   <SelectTrigger><SelectValue placeholder="Select direction" /></SelectTrigger>
-                  <SelectContent>{directions.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="none">Select</SelectItem>
+                    {directions.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </InlineFormField>
               <InlineFormField label="Status/Age">
@@ -572,254 +485,215 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
           <span className="ml-3 text-lg text-muted-foreground">Loading satellites...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Satellite List */}
-          <Card className="lg:col-span-1">
+        <div className="space-y-6">
+          {/* Satellite List - Single line table view with service count */}
+          <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-lg flex items-center justify-between">
-                Satellites
-                <Badge variant="secondary">{filteredSatellites.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Filter satellites..."
-                  value={satelliteFilter}
-                  onChange={(e) => setSatelliteFilter(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Satellites
+                  <Badge variant="secondary">{filteredSatellites.length}</Badge>
+                </CardTitle>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter satellites..."
+                    value={satelliteFilter}
+                    onChange={(e) => setSatelliteFilter(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
               </div>
-              <ScrollArea className="h-[calc(100vh-340px)]">
-                {filteredSatellites.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No satellites found</p>
-                ) : (
-                  filteredSatellites.map((satellite) => (
-                    <div
-                      key={satellite.id}
-                      onClick={() => handleSelectSatellite(satellite)}
-                      className={`p-4 border-b cursor-pointer transition-colors ${selectedSatellite?.id === satellite.id ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-muted/50'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-medium truncate">{satellite.name}</h4>
-                          <p className="text-sm text-muted-foreground">{satellite.position} {satellite.direction}</p>
-                          <div className="flex gap-2 mt-1">
-                            <Badge variant="outline" className="text-xs">{satellite.carriers?.length || 0} carriers</Badge>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 ml-2">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEdit(satellite); }}>
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setDeleteTarget({ type: 'satellite', id: satellite.id }); }}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </ScrollArea>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="rounded-lg border overflow-hidden mx-4 mb-4">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Position</TableHead>
+                      <TableHead>Direction</TableHead>
+                      <TableHead>Carriers</TableHead>
+                      <TableHead>Services</TableHead>
+                      <TableHead>Equipment</TableHead>
+                      <TableHead className="w-28">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSatellites.length === 0 ? (
+                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No satellites found</TableCell></TableRow>
+                    ) : (
+                      filteredSatellites.map((satellite, index) => (
+                        <TableRow 
+                          key={satellite.id} 
+                          className={cn(
+                            "cursor-pointer hover:bg-muted/30",
+                            selectedSatellite?.id === satellite.id && "bg-primary/5"
+                          )}
+                          onClick={() => handleSelectSatellite(satellite)}
+                        >
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell className="font-medium">{satellite.name}</TableCell>
+                          <TableCell>{satellite.position || '-'}</TableCell>
+                          <TableCell>{satellite.direction || '-'}</TableCell>
+                          <TableCell><Badge variant="secondary">{satellite.carriers?.length || 0}</Badge></TableCell>
+                          <TableCell><Badge variant="outline">{getTotalServices(satellite)}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {satellite.mappedLnb && <Badge variant="outline" className="text-[10px]">LNB</Badge>}
+                              {satellite.mappedSwitch && <Badge variant="outline" className="text-[10px]">SW</Badge>}
+                              {satellite.mappedMotor && <Badge variant="outline" className="text-[10px]">MTR</Badge>}
+                              {!satellite.mappedLnb && !satellite.mappedSwitch && !satellite.mappedMotor && <span className="text-xs text-muted-foreground">-</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleEdit(satellite); }}>
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setDeleteTarget({ type: 'satellite', id: satellite.id }); }}>
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Configuration Panel */}
-          <Card className="lg:col-span-3">
-            <CardContent className="p-6">
-              {!selectedSatellite ? (
-                <div className="text-center py-20 text-muted-foreground">
-                  <Satellite className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                  <p>Select a satellite to configure carriers, services, and equipment</p>
+          {/* Selected Satellite Configuration - Accordion based carriers */}
+          {selectedSatellite && (
+            <Card>
+              <CardHeader className="py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl">{selectedSatellite.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{selectedSatellite.position} {selectedSatellite.direction}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary">{selectedSatellite.carriers?.length || 0} Carriers</Badge>
+                    <Badge variant="secondary">{getTotalServices(selectedSatellite)} Services</Badge>
+                    <Button variant="outline" size="sm" onClick={handleOpenEquipmentDialog}>
+                      <Settings className="h-4 w-4 mr-1" />
+                      Equipment
+                    </Button>
+                    <Button size="sm" onClick={handleAddCarrier}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Carrier
+                    </Button>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold">{selectedSatellite.name}</h3>
-                      <p className="text-sm text-muted-foreground">{selectedSatellite.position} {selectedSatellite.direction}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{selectedSatellite.carriers?.length || 0} Carriers</Badge>
-                      <Badge variant="secondary">{getTotalServices()} Services</Badge>
-                      <Button variant="outline" size="sm" onClick={handleOpenEquipmentDialog}>
-                        <Settings className="h-4 w-4 mr-1" />
-                        Equipment
-                      </Button>
-                    </div>
+              </CardHeader>
+              <CardContent>
+                {/* Equipment Summary */}
+                <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Radio className="h-4 w-4 text-primary" />
+                    <span className="text-sm">LNB: {getEquipmentName('lnb', selectedSatellite.mappedLnb)}</span>
                   </div>
-
-                  {/* Equipment Summary */}
-                  <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Radio className="h-4 w-4 text-primary" />
-                      <span className="text-sm">LNB: {getEquipmentName('lnb', selectedSatellite.mappedLnb)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-primary" />
-                      <span className="text-sm">Switch: {selectedSatellite.mappedSwitch ? selectedSatellite.mappedSwitch.split(',').map(id => getEquipmentName('switch', id)).join(', ') : '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RotateCcw className="h-4 w-4 text-primary" />
-                      <span className="text-sm">Motor: {getEquipmentName('motor', selectedSatellite.mappedMotor)}</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    <span className="text-sm">Switch: {selectedSatellite.mappedSwitch ? selectedSatellite.mappedSwitch.split(',').map(id => getEquipmentName('switch', id)).join(', ') : '-'}</span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="h-4 w-4 text-primary" />
+                    <span className="text-sm">Motor: {getEquipmentName('motor', selectedSatellite.mappedMotor)}</span>
+                  </div>
+                </div>
 
-                  <Tabs defaultValue="carriers" className="w-full">
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="carriers">Carriers</TabsTrigger>
-                      <TabsTrigger value="services">Services</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="carriers">
-                      <div className="flex items-center justify-between mb-3 gap-4">
-                        <div className="flex items-center gap-3 flex-1">
-                          <h4 className="font-medium">Carrier List</h4>
-                          <div className="relative flex-1 max-w-xs">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              placeholder="Filter carriers..."
-                              value={carrierFilter}
-                              onChange={(e) => setCarrierFilter(e.target.value)}
-                              className="pl-9"
-                            />
+                {/* Accordion-based Carriers with inline Services */}
+                {selectedSatellite.carriers.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No carriers. Click "Add Carrier" to create one.</p>
+                ) : (
+                  <Accordion type="multiple" className="w-full">
+                    {selectedSatellite.carriers.map((carrier, cIdx) => (
+                      <AccordionItem key={carrier.id} value={carrier.id} className="border rounded-lg mb-2">
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                          <div className="flex items-center gap-3 flex-1 text-left">
+                            <span className="font-medium">{carrier.name}</span>
+                            <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>
+                            <Badge variant="outline" className="text-xs">{carrier.polarization}</Badge>
+                            <Badge variant="secondary" className="text-xs">{carrier.services?.length || 0} services</Badge>
+                            <div className="ml-auto flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(carrier)}>
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}>
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
                           </div>
-                          <Select value={polarizationFilter} onValueChange={setPolarizationFilter}>
-                            <SelectTrigger className="w-40">
-                              <Filter className="h-4 w-4 mr-2" />
-                              <SelectValue placeholder="Polarization" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Polarizations</SelectItem>
-                              {polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button size="sm" onClick={handleAddCarrier}><Plus className="h-4 w-4 mr-1" /> Add Carrier</Button>
-                      </div>
-                      <div className="rounded-lg border overflow-hidden">
-                        <Table>
-                          <TableHeader className="bg-muted/50">
-                            <TableRow>
-                              <TableHead className="w-12">#</TableHead>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Frequency</TableHead>
-                              <TableHead>Polarization</TableHead>
-                              <TableHead>Symbol Rate</TableHead>
-                              <TableHead>FEC</TableHead>
-                              <TableHead>Services</TableHead>
-                              <TableHead className="w-20">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {getPaginatedCarriers().length === 0 ? (
-                              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No carriers found.</TableCell></TableRow>
-                            ) : (
-                              getPaginatedCarriers().map((carrier, index) => (
-                                <TableRow key={carrier.id} className="hover:bg-muted/30">
-                                  <TableCell>{(carrierPage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
-                                  <TableCell className="font-medium">{carrier.name}</TableCell>
-                                  <TableCell>{carrier.frequency}</TableCell>
-                                  <TableCell>{carrier.polarization}</TableCell>
-                                  <TableCell>{carrier.symbolRate || '-'}</TableCell>
-                                  <TableCell>{carrier.fec || '-'}</TableCell>
-                                  <TableCell><Badge variant="secondary">{carrier.services?.length || 0}</Badge></TableCell>
-                                  <TableCell>
-                                    <div className="flex gap-1">
-                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(carrier)}><Edit className="h-3 w-3" /></Button>
-                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      {/* Carrier Pagination */}
-                      {getTotalCarrierPages() > 1 && (
-                        <div className="flex items-center justify-between mt-4 px-2">
-                          <p className="text-sm text-muted-foreground">
-                            Showing {(carrierPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(carrierPage * ITEMS_PER_PAGE, getFilteredCarriers().length)} of {getFilteredCarriers().length} carriers
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setCarrierPage(p => Math.max(1, p - 1))} disabled={carrierPage === 1}>Previous</Button>
-                            <span className="text-sm">Page {carrierPage} of {getTotalCarrierPages()}</span>
-                            <Button variant="outline" size="sm" onClick={() => setCarrierPage(p => Math.min(getTotalCarrierPages(), p + 1))} disabled={carrierPage >= getTotalCarrierPages()}>Next</Button>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          {/* Carrier details */}
+                          <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/20 rounded-lg text-sm">
+                            <div><span className="text-muted-foreground">Symbol Rate:</span> {carrier.symbolRate || '-'}</div>
+                            <div><span className="text-muted-foreground">FEC:</span> {carrier.fec || '-'}</div>
+                            <div><span className="text-muted-foreground">FEC Mode:</span> {carrier.fecMode || '-'}</div>
+                            <div><span className="text-muted-foreground">Factory Default:</span> {carrier.factoryDefault ? 'Yes' : 'No'}</div>
                           </div>
-                        </div>
-                      )}
-                    </TabsContent>
 
-                    <TabsContent value="services">
-                      <div className="flex items-center justify-between mb-3 gap-4">
-                        <div className="flex items-center gap-3 flex-1">
-                          <h4 className="font-medium">Services</h4>
-                          <Select value={selectedCarrier?.id || ""} onValueChange={(id) => setSelectedCarrier(selectedSatellite.carriers.find(c => c.id === id) || null)}>
-                            <SelectTrigger className="w-48"><SelectValue placeholder="Select carrier" /></SelectTrigger>
-                            <SelectContent>{selectedSatellite.carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                          {selectedCarrier && (
-                            <div className="relative flex-1 max-w-xs">
-                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                              <Input placeholder="Filter services..." value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="pl-9" />
+                          {/* Services in this carrier */}
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-medium">Services ({carrier.services?.length || 0})</h4>
+                            <Button size="sm" variant="outline" onClick={() => handleAddService(carrier)}>
+                              <Plus className="h-3 w-3 mr-1" /> Add Service
+                            </Button>
+                          </div>
+                          {(carrier.services?.length || 0) === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">No services. Click "Add Service" to add one.</p>
+                          ) : (
+                            <div className="rounded-lg border overflow-hidden">
+                              <Table>
+                                <TableHeader className="bg-muted/50">
+                                  <TableRow>
+                                    <TableHead className="w-12">#</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Frequency</TableHead>
+                                    <TableHead>Video PID</TableHead>
+                                    <TableHead>Audio PID</TableHead>
+                                    <TableHead>PCR PID</TableHead>
+                                    <TableHead>Program #</TableHead>
+                                    <TableHead>Scramble</TableHead>
+                                    <TableHead className="w-20">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {carrier.services.map((service, sIdx) => (
+                                    <TableRow key={service.id} className="hover:bg-muted/30">
+                                      <TableCell>{sIdx + 1}</TableCell>
+                                      <TableCell className="font-medium">{service.name}</TableCell>
+                                      <TableCell>{service.frequency || '-'}</TableCell>
+                                      <TableCell>{service.videoPid || '-'}</TableCell>
+                                      <TableCell>{service.audioPid || '-'}</TableCell>
+                                      <TableCell>{service.pcrPid || '-'}</TableCell>
+                                      <TableCell>{service.programNumber || '-'}</TableCell>
+                                      <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
+                                      <TableCell>
+                                        <div className="flex gap-1">
+                                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditService(carrier, service)}><Edit className="h-3 w-3" /></Button>
+                                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'service', id: service.id, carrierId: carrier.id })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
                             </div>
                           )}
-                        </div>
-                        {selectedCarrier && <Button size="sm" onClick={() => handleAddService(selectedCarrier)}><Plus className="h-4 w-4 mr-1" /> Add Service</Button>}
-                      </div>
-                      {!selectedCarrier ? (
-                        <p className="text-center text-muted-foreground py-8">Select a carrier to view its services</p>
-                      ) : (
-                        <div className="rounded-lg border overflow-hidden">
-                          <Table>
-                            <TableHeader className="bg-muted/50">
-                              <TableRow>
-                                <TableHead className="w-12">#</TableHead>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Frequency</TableHead>
-                                <TableHead>Video PID</TableHead>
-                                <TableHead>Audio PID</TableHead>
-                                <TableHead>PCR PID</TableHead>
-                                <TableHead>Program #</TableHead>
-                                <TableHead>Scramble</TableHead>
-                                <TableHead className="w-20">Actions</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {getFilteredServices().length === 0 ? (
-                                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No services found.</TableCell></TableRow>
-                              ) : (
-                                getFilteredServices().map((service, index) => (
-                                  <TableRow key={service.id} className="hover:bg-muted/30">
-                                    <TableCell>{index + 1}</TableCell>
-                                    <TableCell className="font-medium">{service.name}</TableCell>
-                                    <TableCell>{service.frequency || '-'}</TableCell>
-                                    <TableCell>{service.videoPid || '-'}</TableCell>
-                                    <TableCell>{service.audioPid || '-'}</TableCell>
-                                    <TableCell>{service.pcrPid || '-'}</TableCell>
-                                    <TableCell>{service.programNumber || '-'}</TableCell>
-                                    <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
-                                    <TableCell>
-                                      <div className="flex gap-1">
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditService(selectedCarrier, service)}><Edit className="h-3 w-3" /></Button>
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'service', id: service.id, carrierId: selectedCarrier.id })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))
-                              )}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      )}
-                    </TabsContent>
-                  </Tabs>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -950,5 +824,10 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     </div>
   );
 };
+
+// cn utility inline for this component
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(' ');
+}
 
 export default SatelliteManagement;
