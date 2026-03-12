@@ -826,9 +826,4 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   );
 };
 
-// cn utility inline for this component
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ');
-}
-
 export default SatelliteManagement;
