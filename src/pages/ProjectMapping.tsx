@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
   FolderOpen, Radio, Zap, RotateCcw, Activity, Satellite, Loader2, FileCode, Download, Package,
   ChevronRight, Settings, FileText, Search, Edit, Save, Eye, Plus, Trash2, BarChart3
@@ -40,13 +41,11 @@ interface Build {
 const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const { toast } = useToast();
   
-  // Selection states
   const [projects, setProjects] = useState<Project[]>([]);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedBuildId, setSelectedBuildId] = useState<string>('');
   
-  // Loading states
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isLoadingBuilds, setIsLoadingBuilds] = useState(false);
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
@@ -55,44 +54,43 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [isGeneratingBin, setIsGeneratingBin] = useState(false);
   const [isUpdatingEquipment, setIsUpdatingEquipment] = useState(false);
   
-  // Equipment lists (global bucket)
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
   const [allSwitches, setAllSwitches] = useState<any[]>([]);
   const [allMotors, setAllMotors] = useState<any[]>([]);
   const [allUnicables, setAllUnicables] = useState<any[]>([]);
   const [allSatellites, setAllSatellites] = useState<any[]>([]);
   
-  // Build mappings
   const [buildMappings, setBuildMappings] = useState<any[]>([]);
   
-  // Search states
   const [lnbSearch, setLnbSearch] = useState("");
   const [switchSearch, setSwitchSearch] = useState("");
   const [motorSearch, setMotorSearch] = useState("");
   const [unicableSearch, setUnicableSearch] = useState("");
   const [satelliteSearch, setSatelliteSearch] = useState("");
   
-  // Edit states
+  // Edit popup state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editingType, setEditingType] = useState<string>("");
   const [editFormData, setEditFormData] = useState<any>({});
   
+  // View popup state
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewingItem, setViewingItem] = useState<any>(null);
+  const [viewingType, setViewingType] = useState<string>("");
+  
   // Satellite detail dialog
-  const [selectedSatelliteDetail, setSelectedSatelliteDetail] = useState<any>(null);
   const [isSatelliteDialogOpen, setIsSatelliteDialogOpen] = useState(false);
   const [satEditData, setSatEditData] = useState<any>(null);
   const [isSavingSatellite, setIsSavingSatellite] = useState(false);
   
-  // Report dialog
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
 
-  // Load projects on mount
   useEffect(() => {
     loadProjects();
     loadAllEquipment();
   }, []);
 
-  // Load builds when project changes
   useEffect(() => {
     if (selectedProjectId) {
       loadBuilds(selectedProjectId);
@@ -101,7 +99,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     }
   }, [selectedProjectId]);
 
-  // Load mappings when build changes
   useEffect(() => {
     if (selectedBuildId) {
       loadBuildMappings(selectedBuildId);
@@ -114,7 +111,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       const data = await apiService.getProjects();
       setProjects(data || []);
     } catch (error) {
-      console.error('Failed to load projects:', error);
       toast({ title: "Error", description: "Failed to load projects", variant: "destructive" });
     } finally {
       setIsLoadingProjects(false);
@@ -127,7 +123,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       const data = await apiService.getProjectBuilds(projectId);
       setBuilds(data || []);
     } catch (error) {
-      console.error('Failed to load builds:', error);
       toast({ title: "Error", description: "Failed to load builds", variant: "destructive" });
     } finally {
       setIsLoadingBuilds(false);
@@ -173,35 +168,19 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       toast({ title: "Error", description: "Please select a build first", variant: "destructive" });
       return;
     }
-
     setIsSavingMapping(`${equipmentType}-${equipmentId}`);
     try {
-      const existingMapping = buildMappings.find(
-        m => m.equipmentType === equipmentType && m.equipmentId === equipmentId
-      );
-
+      const existingMapping = buildMappings.find(m => m.equipmentType === equipmentType && m.equipmentId === equipmentId);
       if (existingMapping) {
         await apiService.removeBuildMapping(selectedBuildId, equipmentType, equipmentId);
-        setBuildMappings(prev => prev.filter(m => 
-          !(m.equipmentType === equipmentType && m.equipmentId === equipmentId)
-        ));
+        setBuildMappings(prev => prev.filter(m => !(m.equipmentType === equipmentType && m.equipmentId === equipmentId)));
         toast({ title: "Removed", description: "Equipment removed from build." });
       } else {
         await apiService.addBuildMapping(selectedBuildId, equipmentType, equipmentId);
-        setBuildMappings(prev => [...prev, { 
-          buildId: selectedBuildId, 
-          equipmentType, 
-          equipmentId 
-        }]);
+        setBuildMappings(prev => [...prev, { buildId: selectedBuildId, equipmentType, equipmentId }]);
         toast({ title: "Added", description: "Equipment added to build." });
       }
-
-      await apiService.logActivity(
-        username, 
-        existingMapping ? "Mapping Removed" : "Mapping Added", 
-        `${existingMapping ? 'Removed' : 'Added'} ${equipmentType} mapping to build`, 
-        selectedProjectId
-      );
+      await apiService.logActivity(username, existingMapping ? "Mapping Removed" : "Mapping Added", `${existingMapping ? 'Removed' : 'Added'} ${equipmentType} mapping to build`, selectedProjectId);
     } catch (error) {
       toast({ title: "Error", description: "Failed to update mapping", variant: "destructive" });
     } finally {
@@ -210,32 +189,29 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   };
 
   const isMapped = (equipmentType: string, equipmentId: string) => {
-    return buildMappings.some(
-      m => m.equipmentType === equipmentType && m.equipmentId === equipmentId
-    );
+    return buildMappings.some(m => m.equipmentType === equipmentType && m.equipmentId === equipmentId);
   };
 
   const getMappingCount = (equipmentType: string) => {
     return buildMappings.filter(m => m.equipmentType === equipmentType).length;
   };
 
-  // Start editing
-  const handleStartEdit = (item: any, type: string) => {
+  // Edit popup handlers
+  const handleOpenEdit = (item: any, type: string) => {
     setEditingItem(item);
     setEditingType(type);
     setEditFormData({ ...item });
+    setEditDialogOpen(true);
   };
 
-  // Save edited item
   const handleSaveEdit = async () => {
     if (!editingItem || !editingType) return;
-    
     setIsUpdatingEquipment(true);
     try {
       await apiService.updateEquipment(editingType, editingItem.id, editFormData);
-      toast({ title: "Updated", description: `Equipment updated successfully.` });
+      toast({ title: "Updated", description: "Equipment updated successfully." });
+      setEditDialogOpen(false);
       setEditingItem(null);
-      setEditingType("");
       loadAllEquipment();
     } catch (error) {
       toast({ title: "Error", description: "Failed to update equipment.", variant: "destructive" });
@@ -244,10 +220,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     }
   };
 
+  const handleOpenView = (item: any, type: string) => {
+    setViewingItem(item);
+    setViewingType(type);
+    setViewDialogOpen(true);
+  };
+
   // Satellite edit handler
   const handleOpenSatelliteEdit = (sat: any) => {
-    setSelectedSatelliteDetail(sat);
-    setSatEditData(JSON.parse(JSON.stringify(sat))); // deep clone
+    setSatEditData(JSON.parse(JSON.stringify(sat)));
     setIsSatelliteDialogOpen(true);
   };
 
@@ -303,32 +284,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   };
 
   // Filter functions
-  const filteredLnbs = allLnbs.filter(l => 
-    l.name?.toLowerCase().includes(lnbSearch.toLowerCase()) ||
-    l.bandType?.toLowerCase().includes(lnbSearch.toLowerCase())
-  );
-
-  const filteredSwitches = allSwitches.filter(s =>
-    s.switchType?.toLowerCase().includes(switchSearch.toLowerCase())
-  );
-
-  const filteredMotors = allMotors.filter(m =>
-    m.motorType?.toLowerCase().includes(motorSearch.toLowerCase())
-  );
-
-  const filteredUnicables = allUnicables.filter(u =>
-    u.unicableType?.toLowerCase().includes(unicableSearch.toLowerCase())
-  );
-
-  const filteredSatellites = allSatellites.filter(s =>
-    s.name?.toLowerCase().includes(satelliteSearch.toLowerCase()) ||
-    s.position?.toLowerCase().includes(satelliteSearch.toLowerCase())
-  );
+  const filteredLnbs = allLnbs.filter(l => l.name?.toLowerCase().includes(lnbSearch.toLowerCase()) || l.bandType?.toLowerCase().includes(lnbSearch.toLowerCase()));
+  const filteredSwitches = allSwitches.filter(s => s.switchType?.toLowerCase().includes(switchSearch.toLowerCase()));
+  const filteredMotors = allMotors.filter(m => m.motorType?.toLowerCase().includes(motorSearch.toLowerCase()));
+  const filteredUnicables = allUnicables.filter(u => u.unicableType?.toLowerCase().includes(unicableSearch.toLowerCase()));
+  const filteredSatellites = allSatellites.filter(s => s.name?.toLowerCase().includes(satelliteSearch.toLowerCase()) || s.position?.toLowerCase().includes(satelliteSearch.toLowerCase()));
 
   const generateBuildXML = (): string => {
     const selectedBuild = builds.find(b => b.id === selectedBuildId);
     if (!selectedBuild) return "";
-    
     const mappedLnbs = allLnbs.filter(l => isMapped('lnbs', l.id));
     const mappedSwitches = allSwitches.filter(s => isMapped('switches', s.id));
     const mappedMotors = allMotors.filter(m => isMapped('motors', m.id));
@@ -337,86 +301,36 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<SDB>\n  <projinfo>\n`;
     xml += `    <projname>${selectedBuild.name}</projname>\n`;
-    
-    // LNB Block
     mappedLnbs.forEach(l => {
-      xml += `    <LNBlock>\n`;
-      xml += `      <name>${l.name}</name>\n`;
-      xml += `      <LowFrequency>${l.lowFrequency || ''}</LowFrequency>\n`;
-      xml += `      <HighFrequency>${l.highFrequency || ''}</HighFrequency>\n`;
-      xml += `      <LO1High>${l.lo1High || ''}</LO1High>\n`;
-      xml += `      <LO1Low>${l.lo1Low || ''}</LO1Low>\n`;
-      xml += `      <BandType>${l.bandType || ''}</BandType>\n`;
-      xml += `      <PowerControl>${l.powerControl || ''}</PowerControl>\n`;
-      xml += `      <VControl>${l.vControl || ''}</VControl>\n`;
-      xml += `      <KhzOption>${l.khzOption || ''}</KhzOption>\n`;
-      xml += `    </LNBlock>\n`;
+      xml += `    <LNBlock>\n      <name>${l.name}</name>\n      <LowFrequency>${l.lowFrequency || ''}</LowFrequency>\n      <HighFrequency>${l.highFrequency || ''}</HighFrequency>\n      <LO1High>${l.lo1High || ''}</LO1High>\n      <LO1Low>${l.lo1Low || ''}</LO1Low>\n      <BandType>${l.bandType || ''}</BandType>\n      <PowerControl>${l.powerControl || ''}</PowerControl>\n      <VControl>${l.vControl || ''}</VControl>\n      <KhzOption>${l.khzOption || ''}</KhzOption>\n    </LNBlock>\n`;
     });
-    
-    // Switch Block
     mappedSwitches.forEach(s => {
-      xml += `    <switchblock>\n`;
-      xml += `      <type>${s.switchType || ''}</type>\n`;
+      xml += `    <switchblock>\n      <type>${s.switchType || ''}</type>\n`;
       const options = Array.isArray(s.switchOptions) ? s.switchOptions : [];
-      options.forEach((opt: string, idx: number) => {
-        xml += `      <option${idx + 1}>${opt}</option${idx + 1}>\n`;
-      });
+      options.forEach((opt: string, idx: number) => { xml += `      <option${idx + 1}>${opt}</option${idx + 1}>\n`; });
       xml += `    </switchblock>\n`;
     });
-    
-    // Motor Block
     mappedMotors.forEach(m => {
-      xml += `    <motor>\n`;
-      xml += `      <type>${m.motorType || ''}</type>\n`;
-      if (m.motorType === 'DiSEqC 1.0') {
-        xml += `      <position>${m.position || ''}</position>\n`;
-      } else {
-        xml += `      <longitude>${m.longitude || ''}</longitude>\n`;
-        xml += `      <latitude>${m.latitude || ''}</latitude>\n`;
-        xml += `      <eastWest>${m.eastWest || ''}</eastWest>\n`;
-        xml += `      <northSouth>${m.northSouth || ''}</northSouth>\n`;
-      }
+      xml += `    <motor>\n      <type>${m.motorType || ''}</type>\n`;
+      if (m.motorType === 'DiSEqC 1.0') { xml += `      <position>${m.position || ''}</position>\n`; }
+      else { xml += `      <longitude>${m.longitude || ''}</longitude>\n      <latitude>${m.latitude || ''}</latitude>\n      <eastWest>${m.eastWest || ''}</eastWest>\n      <northSouth>${m.northSouth || ''}</northSouth>\n`; }
       xml += `    </motor>\n`;
     });
-    
-    // Unicable Block
     mappedUnicables.forEach(u => {
-      xml += `    <unicable>\n`;
-      xml += `      <type>${u.unicableType || ''}</type>\n`;
-      xml += `      <status>${u.status || ''}</status>\n`;
-      if (u.unicableType === 'DSCR') {
-        xml += `      <port>${u.port || ''}</port>\n`;
-      }
+      xml += `    <unicable>\n      <type>${u.unicableType || ''}</type>\n      <status>${u.status || ''}</status>\n`;
+      if (u.unicableType === 'DSCR') xml += `      <port>${u.port || ''}</port>\n`;
       const slots = Array.isArray(u.ifSlots) ? u.ifSlots : [];
-      slots.forEach((slot: string, idx: number) => {
-        xml += `      <slot${idx + 1}>${slot}</slot${idx + 1}>\n`;
-      });
+      slots.forEach((slot: string, idx: number) => { xml += `      <slot${idx + 1}>${slot}</slot${idx + 1}>\n`; });
       xml += `    </unicable>\n`;
     });
-    
-    // Satellite Block
     if (mappedSats.length > 0) {
       xml += `    <sattliteblock>\n`;
       mappedSats.forEach(sat => {
-        xml += `      <sattliteinfo>\n`;
-        xml += `        <name>${sat.name}</name>\n`;
-        xml += `        <position>${sat.position || ''}</position>\n`;
-        xml += `        <direction>${sat.direction || ''}</direction>\n`;
+        xml += `      <sattliteinfo>\n        <name>${sat.name}</name>\n        <position>${sat.position || ''}</position>\n        <direction>${sat.direction || ''}</direction>\n`;
         (sat.carriers || []).forEach((c: any) => {
-          xml += `        <carrers>\n`;
-          xml += `          <name>${c.name}</name>\n`;
-          xml += `          <frequency>${c.frequency || ''}</frequency>\n`;
-          xml += `          <polarization>${c.polarization || ''}</polarization>\n`;
-          xml += `          <symbolRate>${c.symbolRate || ''}</symbolRate>\n`;
-          xml += `          <fec>${c.fec || ''}</fec>\n`;
+          xml += `        <carrers>\n          <name>${c.name}</name>\n          <frequency>${c.frequency || ''}</frequency>\n          <polarization>${c.polarization || ''}</polarization>\n          <symbolRate>${c.symbolRate || ''}</symbolRate>\n          <fec>${c.fec || ''}</fec>\n`;
           (c.services || []).forEach((s: any) => {
-            xml += `          <services>\n`;
-            xml += `            <name>${s.name}</name>\n`;
-            xml += `            <videoPid>${s.videoPid || ''}</videoPid>\n`;
-            xml += `            <audioPid>${s.audioPid || ''}</audioPid>\n`;
-            xml += `            <pcrPid>${s.pcrPid || ''}</pcrPid>\n`;
-            xml += `            <programNumber>${s.programNumber || ''}</programNumber>\n`;
-            xml += `          </services>\n`;
+            xml += `          <services>\n            <name>${s.name}</name>\n            <videoPid>${s.videoPid || ''}</videoPid>\n            <audioPid>${s.audioPid || ''}</audioPid>\n            <pcrPid>${s.pcrPid || ''}</pcrPid>\n            <programNumber>${s.programNumber || ''}</programNumber>\n          </services>\n`;
           });
           xml += `        </carrers>\n`;
         });
@@ -424,27 +338,21 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       });
       xml += `    </sattliteblock>\n`;
     }
-    
     xml += `  </projinfo>\n</SDB>`;
     return xml;
   };
 
   const handleGenerateBin = async () => {
     if (!selectedBuildId) return;
-    
     setIsGeneratingBin(true);
     try {
       const xmlData = generateBuildXML();
       await apiService.updateProjectBuild(selectedBuildId, { xmlData });
-      
       const result = await apiService.generateBin(xmlData);
-      
       if (result.success && result.data) {
         const binaryString = atob(result.data);
         const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
         const blob = new Blob([bytes], { type: 'application/octet-stream' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -467,11 +375,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
-        toast({
-          title: "XML Downloaded", 
-          description: result.error || "BIN generation requires bundled executables. XML downloaded instead."
-        });
+        toast({ title: "XML Downloaded", description: result.error || "BIN generation requires bundled executables. XML downloaded instead." });
       }
     } catch (error) {
       toast({ title: "Error", description: "Failed to generate BIN file", variant: "destructive" });
@@ -484,7 +388,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     const selectedProject = projects.find(p => p.id === selectedProjectId);
     const selectedBuild = builds.find(b => b.id === selectedBuildId);
     if (!selectedProject || !selectedBuild) return;
-    
     exportService.exportToPDF(
       { ...selectedProject, name: `${selectedProject.name} - ${selectedBuild.name}` },
       buildMappings,
@@ -497,7 +400,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     const selectedProject = projects.find(p => p.id === selectedProjectId);
     const selectedBuild = builds.find(b => b.id === selectedBuildId);
     if (!selectedProject || !selectedBuild) return;
-    
     exportService.exportToExcel(
       { ...selectedProject, name: `${selectedProject.name} - ${selectedBuild.name}` },
       buildMappings,
@@ -506,203 +408,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     toast({ title: "Export Complete", description: "Excel file downloaded." });
   };
 
-  // Render equipment item card with full details
-  const renderEquipmentCard = (item: any, type: string, icon: React.ReactNode) => {
-    const mapped = isMapped(type, item.id);
-    const saving = isSavingMapping === `${type}-${item.id}`;
-    const isEditing = editingItem?.id === item.id && editingType === type;
-
-    return (
-      <Card 
-        key={item.id} 
-        className={`transition-all ${mapped ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'}`}
-      >
-        <CardHeader className="py-3 px-4">
-          <div className="flex items-center justify-between">
-            <div 
-              className="flex items-center gap-2 flex-1 cursor-pointer"
-              onClick={() => !saving && handleToggleMapping(type, item.id)}
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Checkbox checked={mapped} className="pointer-events-none" />
-              )}
-              {icon}
-              <div className="min-w-0 flex-1">
-                <CardTitle className="text-sm truncate">
-                  {type === 'lnbs' ? item.name : 
-                   type === 'switches' ? item.switchType :
-                   type === 'motors' ? item.motorType :
-                   type === 'unicables' ? item.unicableType :
-                   item.name}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground truncate">
-                  {type === 'lnbs' && `${item.bandType || 'N/A'} | ${item.lowFrequency || '?'}-${item.highFrequency || '?'}`}
-                  {type === 'switches' && `${(item.switchOptions || []).length} options`}
-                  {type === 'motors' && (item.motorType === 'DiSEqC 1.0' ? `Pos: ${item.position || 'N/A'}` : `${item.longitude || '?'}° ${item.eastWest || ''}`)}
-                  {type === 'unicables' && `${item.status || 'OFF'} | ${(item.ifSlots || []).length} slots`}
-                  {type === 'satellites' && `${item.position || 'N/A'} | ${(item.carriers || []).length} carriers`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              {mapped && <Badge variant="default" className="text-xs mr-1">Mapped</Badge>}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-7 w-7 p-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (type === 'satellites') {
-                    handleOpenSatelliteEdit(item);
-                  } else if (isEditing) {
-                    setEditingItem(null);
-                    setEditingType("");
-                  } else {
-                    handleStartEdit(item, type);
-                  }
-                }}
-              >
-                {type === 'satellites' ? <Eye className="h-3 w-3" /> : isEditing ? <Eye className="h-3 w-3" /> : <Edit className="h-3 w-3" />}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        
-        {isEditing && type !== 'satellites' && (
-          <CardContent className="pt-0 px-4 pb-4">
-            <Separator className="mb-3" />
-            {type === 'lnbs' && (
-              <div className="space-y-2">
-                <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
-                <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
-                <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
-                <InlineFormField label="LO1(H)"><Input value={editFormData.lo1High || ""} onChange={(e) => setEditFormData({...editFormData, lo1High: e.target.value})} /></InlineFormField>
-                <InlineFormField label="LO1(L)"><Input value={editFormData.lo1Low || ""} onChange={(e) => setEditFormData({...editFormData, lo1Low: e.target.value})} /></InlineFormField>
-                <InlineFormField label="Band Type">
-                  <Select value={editFormData.bandType || ""} onValueChange={(v) => setEditFormData({...editFormData, bandType: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="C-Band">C-Band</SelectItem>
-                      <SelectItem value="Ku-Band">Ku-Band</SelectItem>
-                      <SelectItem value="Ka-Band">Ka-Band</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </InlineFormField>
-              </div>
-            )}
-            {type === 'switches' && (
-              <div className="space-y-2">
-                <InlineFormField label="Type">
-                  <Select value={editFormData.switchType || ""} onValueChange={(v) => setEditFormData({...editFormData, switchType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Tone Burst">Tone Burst</SelectItem>
-                      <SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem>
-                      <SelectItem value="DiSEqC 1.1">DiSEqC 1.1</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </InlineFormField>
-                <div>
-                  <p className="text-xs font-medium mb-2">Options</p>
-                  {(editFormData.switchOptions || []).map((opt: string, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 mb-1">
-                      <Input 
-                        value={opt} 
-                        onChange={(e) => {
-                          const newOpts = [...(editFormData.switchOptions || [])];
-                          newOpts[idx] = e.target.value;
-                          setEditFormData({...editFormData, switchOptions: newOpts});
-                        }}
-                        className="flex-1"
-                      />
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditFormData({...editFormData, switchOptions: (editFormData.switchOptions || []).filter((_: any, i: number) => i !== idx)})}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={() => setEditFormData({...editFormData, switchOptions: [...(editFormData.switchOptions || []), ""]})}>
-                    <Plus className="h-3 w-3 mr-1" /> Add
-                  </Button>
-                </div>
-              </div>
-            )}
-            {type === 'motors' && (
-              <div className="space-y-2">
-                <InlineFormField label="Type">
-                  <Select value={editFormData.motorType || ""} onValueChange={(v) => setEditFormData({...editFormData, motorType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem>
-                      <SelectItem value="DiSEqC 1.2">DiSEqC 1.2</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </InlineFormField>
-                {editFormData.motorType === "DiSEqC 1.0" && (
-                  <InlineFormField label="Position"><Input value={editFormData.position || ""} onChange={(e) => setEditFormData({...editFormData, position: e.target.value})} /></InlineFormField>
-                )}
-                {editFormData.motorType === "DiSEqC 1.2" && (
-                  <>
-                    <InlineFormField label="Longitude"><Input value={editFormData.longitude || ""} onChange={(e) => setEditFormData({...editFormData, longitude: e.target.value})} /></InlineFormField>
-                    <InlineFormField label="Latitude"><Input value={editFormData.latitude || ""} onChange={(e) => setEditFormData({...editFormData, latitude: e.target.value})} /></InlineFormField>
-                    <InlineFormField label="E/W">
-                      <Select value={editFormData.eastWest || ""} onValueChange={(v) => setEditFormData({...editFormData, eastWest: v})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
-                      </Select>
-                    </InlineFormField>
-                    <InlineFormField label="N/S">
-                      <Select value={editFormData.northSouth || ""} onValueChange={(v) => setEditFormData({...editFormData, northSouth: v})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="North">North</SelectItem><SelectItem value="South">South</SelectItem></SelectContent>
-                      </Select>
-                    </InlineFormField>
-                  </>
-                )}
-              </div>
-            )}
-            {type === 'unicables' && (
-              <div className="space-y-2">
-                <InlineFormField label="Type">
-                  <Select value={editFormData.unicableType || ""} onValueChange={(v) => setEditFormData({...editFormData, unicableType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="DSCR">DSCR</SelectItem><SelectItem value="DCSS">DCSS</SelectItem></SelectContent>
-                  </Select>
-                </InlineFormField>
-                <InlineFormField label="Status">
-                  <Select value={editFormData.status || "OFF"} onValueChange={(v) => setEditFormData({...editFormData, status: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="ON">ON</SelectItem><SelectItem value="OFF">OFF</SelectItem></SelectContent>
-                  </Select>
-                </InlineFormField>
-                {editFormData.unicableType === "DSCR" && (
-                  <InlineFormField label="Port">
-                    <Select value={editFormData.port || "None"} onValueChange={(v) => setEditFormData({...editFormData, port: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="None">None</SelectItem><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem></SelectContent>
-                    </Select>
-                  </InlineFormField>
-                )}
-              </div>
-            )}
-            <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
-              <Button variant="outline" size="sm" onClick={() => { setEditingItem(null); setEditingType(""); }}>Cancel</Button>
-              <Button size="sm" onClick={handleSaveEdit} disabled={isUpdatingEquipment}>
-                {isUpdatingEquipment ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                Save
-              </Button>
-            </div>
-          </CardContent>
-        )}
-      </Card>
-    );
-  };
-
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const selectedBuild = builds.find(b => b.id === selectedBuildId);
 
-  // Get mapped equipment for report
   const getMappedEquipment = () => ({
     lnbs: allLnbs.filter(l => isMapped('lnbs', l.id)),
     switches: allSwitches.filter(s => isMapped('switches', s.id)),
@@ -710,6 +418,200 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     unicables: allUnicables.filter(u => isMapped('unicables', u.id)),
     satellites: allSatellites.filter(s => isMapped('satellites', s.id))
   });
+
+  // Render equipment table for each tab
+  const renderEquipmentTable = (items: any[], type: string, columns: { key: string; label: string }[]) => {
+    return (
+      <div className="rounded-lg border overflow-hidden">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead className="w-12">Map</TableHead>
+              <TableHead className="w-12">#</TableHead>
+              {columns.map(col => <TableHead key={col.key}>{col.label}</TableHead>)}
+              <TableHead className="w-20">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.length === 0 ? (
+              <TableRow><TableCell colSpan={columns.length + 3} className="text-center py-8 text-muted-foreground">No items found</TableCell></TableRow>
+            ) : (
+              items.map((item, index) => {
+                const mapped = isMapped(type, item.id);
+                const saving = isSavingMapping === `${type}-${item.id}`;
+                return (
+                  <TableRow key={item.id} className={mapped ? 'bg-primary/5' : 'hover:bg-muted/30'}>
+                    <TableCell>
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Checkbox checked={mapped} onCheckedChange={() => handleToggleMapping(type, item.id)} />
+                      )}
+                    </TableCell>
+                    <TableCell>{index + 1}</TableCell>
+                    {columns.map(col => (
+                      <TableCell key={col.key}>
+                        {col.key === 'switchOptions' 
+                          ? (Array.isArray(item[col.key]) ? item[col.key].join(', ') : '-')
+                          : col.key === 'ifSlots'
+                          ? `${(Array.isArray(item[col.key]) ? item[col.key] : []).length} slots`
+                          : col.key === 'carriers'
+                          ? <Badge variant="secondary">{(item[col.key] || []).length}</Badge>
+                          : col.key === 'services'
+                          ? <Badge variant="outline">{(item.carriers || []).reduce((s: number, c: any) => s + (c.services?.length || 0), 0)}</Badge>
+                          : item[col.key] || '-'}
+                      </TableCell>
+                    ))}
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleOpenView(item, type)}>
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => {
+                          if (type === 'satellites') {
+                            handleOpenSatelliteEdit(item);
+                          } else {
+                            handleOpenEdit(item, type);
+                          }
+                        }}>
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  // Render view detail content
+  const renderViewContent = () => {
+    if (!viewingItem) return null;
+    const items: { label: string; value: any }[] = [];
+    if (viewingType === 'lnbs') {
+      items.push({ label: "Name", value: viewingItem.name }, { label: "Band Type", value: viewingItem.bandType }, { label: "Low Frequency", value: viewingItem.lowFrequency }, { label: "High Frequency", value: viewingItem.highFrequency }, { label: "LO1 High", value: viewingItem.lo1High }, { label: "LO1 Low", value: viewingItem.lo1Low }, { label: "Power Control", value: viewingItem.powerControl }, { label: "V Control", value: viewingItem.vControl }, { label: "22KHz", value: viewingItem.khzOption });
+    } else if (viewingType === 'switches') {
+      items.push({ label: "Type", value: viewingItem.switchType }, { label: "Options", value: Array.isArray(viewingItem.switchOptions) ? viewingItem.switchOptions.join(', ') : '-' });
+    } else if (viewingType === 'motors') {
+      items.push({ label: "Type", value: viewingItem.motorType });
+      if (viewingItem.motorType === 'DiSEqC 1.0') { items.push({ label: "Position", value: viewingItem.position }); }
+      else { items.push({ label: "Longitude", value: viewingItem.longitude }, { label: "Latitude", value: viewingItem.latitude }, { label: "E/W", value: viewingItem.eastWest }, { label: "N/S", value: viewingItem.northSouth }); }
+    } else if (viewingType === 'unicables') {
+      items.push({ label: "Type", value: viewingItem.unicableType }, { label: "Status", value: viewingItem.status }, { label: "Port", value: viewingItem.port }, { label: "IF Slots", value: `${(Array.isArray(viewingItem.ifSlots) ? viewingItem.ifSlots : []).length} slots` });
+    } else if (viewingType === 'satellites') {
+      items.push({ label: "Name", value: viewingItem.name }, { label: "Position", value: viewingItem.position }, { label: "Direction", value: viewingItem.direction }, { label: "Carriers", value: (viewingItem.carriers || []).length }, { label: "Services", value: (viewingItem.carriers || []).reduce((s: number, c: any) => s + (c.services?.length || 0), 0) });
+    }
+    return (
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center border-b border-border pb-2 last:border-0">
+            <span className="text-sm text-muted-foreground w-32 shrink-0">{item.label}:</span>
+            <span className="text-sm font-medium">{item.value || '-'}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Render edit form content in dialog
+  const renderEditContent = () => {
+    if (!editingItem || !editingType) return null;
+    if (editingType === 'lnbs') {
+      return (
+        <div className="space-y-3">
+          <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
+          <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="LO1(H)"><Input value={editFormData.lo1High || ""} onChange={(e) => setEditFormData({...editFormData, lo1High: e.target.value})} /></InlineFormField>
+          <InlineFormField label="LO1(L)"><Input value={editFormData.lo1Low || ""} onChange={(e) => setEditFormData({...editFormData, lo1Low: e.target.value})} /></InlineFormField>
+          <InlineFormField label="Band Type">
+            <Select value={editFormData.bandType || "none"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v === "none" ? "" : v})}>
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="C-Band">C-Band</SelectItem><SelectItem value="Ku-Band">Ku-Band</SelectItem><SelectItem value="Ka-Band">Ka-Band</SelectItem></SelectContent>
+            </Select>
+          </InlineFormField>
+        </div>
+      );
+    }
+    if (editingType === 'switches') {
+      return (
+        <div className="space-y-3">
+          <InlineFormField label="Type">
+            <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Tone Burst">Tone Burst</SelectItem><SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem><SelectItem value="DiSEqC 1.1">DiSEqC 1.1</SelectItem></SelectContent>
+            </Select>
+          </InlineFormField>
+          <div>
+            <p className="text-xs font-medium mb-2">Options</p>
+            {(editFormData.switchOptions || []).map((opt: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-2 mb-1">
+                <Input value={opt} onChange={(e) => { const newOpts = [...(editFormData.switchOptions || [])]; newOpts[idx] = e.target.value; setEditFormData({...editFormData, switchOptions: newOpts}); }} className="flex-1" />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditFormData({...editFormData, switchOptions: (editFormData.switchOptions || []).filter((_: any, i: number) => i !== idx)})}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={() => setEditFormData({...editFormData, switchOptions: [...(editFormData.switchOptions || []), ""]})}><Plus className="h-3 w-3 mr-1" /> Add</Button>
+          </div>
+        </div>
+      );
+    }
+    if (editingType === 'motors') {
+      return (
+        <div className="space-y-3">
+          <InlineFormField label="Type">
+            <Select value={editFormData.motorType || "none"} onValueChange={(v) => setEditFormData({...editFormData, motorType: v === "none" ? "" : v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem><SelectItem value="DiSEqC 1.2">DiSEqC 1.2</SelectItem></SelectContent>
+            </Select>
+          </InlineFormField>
+          {editFormData.motorType === "DiSEqC 1.0" && (
+            <InlineFormField label="Position"><Input value={editFormData.position || ""} onChange={(e) => setEditFormData({...editFormData, position: e.target.value})} /></InlineFormField>
+          )}
+          {editFormData.motorType === "DiSEqC 1.2" && (
+            <>
+              <InlineFormField label="Longitude"><Input value={editFormData.longitude || ""} onChange={(e) => setEditFormData({...editFormData, longitude: e.target.value})} /></InlineFormField>
+              <InlineFormField label="Latitude"><Input value={editFormData.latitude || ""} onChange={(e) => setEditFormData({...editFormData, latitude: e.target.value})} /></InlineFormField>
+              <InlineFormField label="E/W">
+                <Select value={editFormData.eastWest || "none"} onValueChange={(v) => setEditFormData({...editFormData, eastWest: v === "none" ? "" : v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+                </Select>
+              </InlineFormField>
+              <InlineFormField label="N/S">
+                <Select value={editFormData.northSouth || "none"} onValueChange={(v) => setEditFormData({...editFormData, northSouth: v === "none" ? "" : v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="North">North</SelectItem><SelectItem value="South">South</SelectItem></SelectContent>
+                </Select>
+              </InlineFormField>
+            </>
+          )}
+        </div>
+      );
+    }
+    if (editingType === 'unicables') {
+      return (
+        <div className="space-y-3">
+          <InlineFormField label="Type">
+            <Select value={editFormData.unicableType || "none"} onValueChange={(v) => setEditFormData({...editFormData, unicableType: v === "none" ? "" : v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="DSCR">DSCR</SelectItem><SelectItem value="DCSS">DCSS</SelectItem></SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="Status">
+            <Select value={editFormData.status || "OFF"} onValueChange={(v) => setEditFormData({...editFormData, status: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="ON">ON</SelectItem><SelectItem value="OFF">OFF</SelectItem></SelectContent>
+            </Select>
+          </InlineFormField>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -722,87 +624,40 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             </div>
             Project Mapping
           </h2>
-          <p className="text-muted-foreground mt-1">
-            Select project and build, then map equipment from the global bucket
-          </p>
+          <p className="text-muted-foreground mt-1">Select project and build, then map equipment from the global bucket</p>
         </div>
       </div>
 
       {/* Selection Flow */}
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Settings className="h-5 w-5" />
-            Selection
-          </CardTitle>
-          <CardDescription>
-            Choose a project and build to view and manage equipment mappings
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2 text-lg"><Settings className="h-5 w-5" />Selection</CardTitle>
+          <CardDescription>Choose a project and build to view and manage equipment mappings</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 flex-wrap">
-            {/* Project Select */}
             <div className="flex-1 min-w-[200px]">
               <InlineFormField label="Project">
                 <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={isLoadingProjects ? "Loading..." : "Select a project"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectTrigger className="w-full"><SelectValue placeholder={isLoadingProjects ? "Loading..." : "Select a project"} /></SelectTrigger>
+                  <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                 </Select>
               </InlineFormField>
             </div>
-
             <ChevronRight className="h-5 w-5 text-muted-foreground hidden sm:block" />
-
-            {/* Build Select */}
             <div className="flex-1 min-w-[200px]">
               <InlineFormField label="Build">
-                <Select 
-                  value={selectedBuildId} 
-                  onValueChange={setSelectedBuildId}
-                  disabled={!selectedProjectId || isLoadingBuilds}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={
-                      !selectedProjectId ? "Select project first" : 
-                      isLoadingBuilds ? "Loading builds..." : 
-                      builds.length === 0 ? "No builds available" :
-                      "Select a build"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {builds.map((build) => (
-                      <SelectItem key={build.id} value={build.id}>
-                        {build.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                <Select value={selectedBuildId} onValueChange={setSelectedBuildId} disabled={!selectedProjectId || isLoadingBuilds}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder={!selectedProjectId ? "Select project first" : isLoadingBuilds ? "Loading builds..." : builds.length === 0 ? "No builds available" : "Select a build"} /></SelectTrigger>
+                  <SelectContent>{builds.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                 </Select>
               </InlineFormField>
             </div>
-
-            {/* Actions */}
             {selectedBuildId && (
               <div className="flex gap-2 items-end">
-                <Button variant="outline" size="sm" onClick={() => setIsReportDialogOpen(true)}>
-                  <BarChart3 className="mr-1 h-4 w-4" />
-                  Report
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                  <FileText className="mr-1 h-4 w-4" />
-                  PDF
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                  <Download className="mr-1 h-4 w-4" />
-                  Excel
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => setIsReportDialogOpen(true)}><BarChart3 className="mr-1 h-4 w-4" />Report</Button>
+                <Button variant="outline" size="sm" onClick={handleExportPDF}><FileText className="mr-1 h-4 w-4" />PDF</Button>
+                <Button variant="outline" size="sm" onClick={handleExportExcel}><Download className="mr-1 h-4 w-4" />Excel</Button>
                 <Button size="sm" onClick={handleGenerateBin} disabled={isGeneratingBin}>
                   {isGeneratingBin ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileCode className="mr-1 h-4 w-4" />}
                   Generate BIN
@@ -810,8 +665,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               </div>
             )}
           </div>
-
-          {/* Selection Info */}
           {selectedProject && selectedBuild && (
             <div className="mt-4 p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2 text-sm">
@@ -819,23 +672,19 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 <span className="font-medium">{selectedProject.name}</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 <span>{selectedBuild.name}</span>
-                <Badge variant="secondary" className="ml-auto">
-                  {buildMappings.length} equipment mapped
-                </Badge>
+                <Badge variant="secondary" className="ml-auto">{buildMappings.length} equipment mapped</Badge>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Equipment Mapping */}
+      {/* Equipment Mapping - Table View */}
       {selectedBuildId ? (
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-lg">SDB Information - Equipment Mapping</CardTitle>
-            <CardDescription>
-              Select equipment to include in this build configuration. Click edit to modify details.
-            </CardDescription>
+            <CardDescription>All equipment shown in table view. Use checkbox to map, eye to view details, edit to modify.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingMappings || isLoadingEquipment ? (
@@ -846,101 +695,36 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             ) : (
               <Tabs defaultValue="lnbs" className="w-full">
                 <TabsList className="grid w-full grid-cols-5 mb-4">
-                  <TabsTrigger value="lnbs" className="flex items-center gap-1">
-                    <Radio className="h-4 w-4" />
-                    <span className="hidden sm:inline">LNBs</span>
-                    <Badge variant="outline" className="ml-1 text-xs">{getMappingCount('lnbs')}/{allLnbs.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="switches" className="flex items-center gap-1">
-                    <Zap className="h-4 w-4" />
-                    <span className="hidden sm:inline">Switches</span>
-                    <Badge variant="outline" className="ml-1 text-xs">{getMappingCount('switches')}/{allSwitches.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="motors" className="flex items-center gap-1">
-                    <RotateCcw className="h-4 w-4" />
-                    <span className="hidden sm:inline">Motors</span>
-                    <Badge variant="outline" className="ml-1 text-xs">{getMappingCount('motors')}/{allMotors.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="unicables" className="flex items-center gap-1">
-                    <Activity className="h-4 w-4" />
-                    <span className="hidden sm:inline">Unicables</span>
-                    <Badge variant="outline" className="ml-1 text-xs">{getMappingCount('unicables')}/{allUnicables.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="satellites" className="flex items-center gap-1">
-                    <Satellite className="h-4 w-4" />
-                    <span className="hidden sm:inline">Satellites</span>
-                    <Badge variant="outline" className="ml-1 text-xs">{getMappingCount('satellites')}/{allSatellites.length}</Badge>
-                  </TabsTrigger>
+                  <TabsTrigger value="lnbs" className="flex items-center gap-1"><Radio className="h-4 w-4" /><span className="hidden sm:inline">LNBs</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('lnbs')}/{allLnbs.length}</Badge></TabsTrigger>
+                  <TabsTrigger value="switches" className="flex items-center gap-1"><Zap className="h-4 w-4" /><span className="hidden sm:inline">Switches</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('switches')}/{allSwitches.length}</Badge></TabsTrigger>
+                  <TabsTrigger value="motors" className="flex items-center gap-1"><RotateCcw className="h-4 w-4" /><span className="hidden sm:inline">Motors</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('motors')}/{allMotors.length}</Badge></TabsTrigger>
+                  <TabsTrigger value="unicables" className="flex items-center gap-1"><Activity className="h-4 w-4" /><span className="hidden sm:inline">Unicables</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('unicables')}/{allUnicables.length}</Badge></TabsTrigger>
+                  <TabsTrigger value="satellites" className="flex items-center gap-1"><Satellite className="h-4 w-4" /><span className="hidden sm:inline">Satellites</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('satellites')}/{allSatellites.length}</Badge></TabsTrigger>
                 </TabsList>
 
-                {/* LNBs Tab */}
                 <TabsContent value="lnbs">
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search LNBs..." value={lnbSearch} onChange={(e) => setLnbSearch(e.target.value)} className="pl-9" />
-                  </div>
-                  <ScrollArea className="h-[400px]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-3">
-                      {filteredLnbs.map(item => renderEquipmentCard(item, 'lnbs', <Radio className="h-4 w-4 text-primary" />))}
-                      {filteredLnbs.length === 0 && <p className="col-span-3 text-center py-8 text-muted-foreground">No LNBs found</p>}
-                    </div>
-                  </ScrollArea>
+                  <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search LNBs..." value={lnbSearch} onChange={(e) => setLnbSearch(e.target.value)} className="pl-9" /></div>
+                  {renderEquipmentTable(filteredLnbs, 'lnbs', [{ key: 'name', label: 'Name' }, { key: 'bandType', label: 'Band' }, { key: 'lowFrequency', label: 'Low Freq' }, { key: 'highFrequency', label: 'High Freq' }, { key: 'lo1High', label: 'LO1(H)' }, { key: 'lo1Low', label: 'LO1(L)' }])}
                 </TabsContent>
 
-                {/* Switches Tab */}
                 <TabsContent value="switches">
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search Switches..." value={switchSearch} onChange={(e) => setSwitchSearch(e.target.value)} className="pl-9" />
-                  </div>
-                  <ScrollArea className="h-[400px]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-3">
-                      {filteredSwitches.map(item => renderEquipmentCard(item, 'switches', <Zap className="h-4 w-4 text-primary" />))}
-                      {filteredSwitches.length === 0 && <p className="col-span-3 text-center py-8 text-muted-foreground">No switches found</p>}
-                    </div>
-                  </ScrollArea>
+                  <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search Switches..." value={switchSearch} onChange={(e) => setSwitchSearch(e.target.value)} className="pl-9" /></div>
+                  {renderEquipmentTable(filteredSwitches, 'switches', [{ key: 'switchType', label: 'Type' }, { key: 'switchOptions', label: 'Options' }])}
                 </TabsContent>
 
-                {/* Motors Tab */}
                 <TabsContent value="motors">
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search Motors..." value={motorSearch} onChange={(e) => setMotorSearch(e.target.value)} className="pl-9" />
-                  </div>
-                  <ScrollArea className="h-[400px]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-3">
-                      {filteredMotors.map(item => renderEquipmentCard(item, 'motors', <RotateCcw className="h-4 w-4 text-primary" />))}
-                      {filteredMotors.length === 0 && <p className="col-span-3 text-center py-8 text-muted-foreground">No motors found</p>}
-                    </div>
-                  </ScrollArea>
+                  <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search Motors..." value={motorSearch} onChange={(e) => setMotorSearch(e.target.value)} className="pl-9" /></div>
+                  {renderEquipmentTable(filteredMotors, 'motors', [{ key: 'motorType', label: 'Type' }, { key: 'position', label: 'Position' }, { key: 'longitude', label: 'Longitude' }, { key: 'latitude', label: 'Latitude' }])}
                 </TabsContent>
 
-                {/* Unicables Tab */}
                 <TabsContent value="unicables">
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search Unicables..." value={unicableSearch} onChange={(e) => setUnicableSearch(e.target.value)} className="pl-9" />
-                  </div>
-                  <ScrollArea className="h-[400px]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-3">
-                      {filteredUnicables.map(item => renderEquipmentCard(item, 'unicables', <Activity className="h-4 w-4 text-primary" />))}
-                      {filteredUnicables.length === 0 && <p className="col-span-3 text-center py-8 text-muted-foreground">No unicables found</p>}
-                    </div>
-                  </ScrollArea>
+                  <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search Unicables..." value={unicableSearch} onChange={(e) => setUnicableSearch(e.target.value)} className="pl-9" /></div>
+                  {renderEquipmentTable(filteredUnicables, 'unicables', [{ key: 'unicableType', label: 'Type' }, { key: 'status', label: 'Status' }, { key: 'port', label: 'Port' }, { key: 'ifSlots', label: 'Slots' }])}
                 </TabsContent>
 
-                {/* Satellites Tab */}
                 <TabsContent value="satellites">
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search Satellites..." value={satelliteSearch} onChange={(e) => setSatelliteSearch(e.target.value)} className="pl-9" />
-                  </div>
-                  <ScrollArea className="h-[400px]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-3">
-                      {filteredSatellites.map(item => renderEquipmentCard(item, 'satellites', <Satellite className="h-4 w-4 text-primary" />))}
-                      {filteredSatellites.length === 0 && <p className="col-span-3 text-center py-8 text-muted-foreground">No satellites found</p>}
-                    </div>
-                  </ScrollArea>
+                  <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search Satellites..." value={satelliteSearch} onChange={(e) => setSatelliteSearch(e.target.value)} className="pl-9" /></div>
+                  {renderEquipmentTable(filteredSatellites, 'satellites', [{ key: 'name', label: 'Name' }, { key: 'position', label: 'Position' }, { key: 'direction', label: 'Direction' }, { key: 'carriers', label: 'Carriers' }, { key: 'services', label: 'Services' }])}
                 </TabsContent>
               </Tabs>
             )}
@@ -951,14 +735,45 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
           <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <FolderOpen className="h-16 w-16 mb-4 opacity-50" />
             <h3 className="text-lg font-medium mb-2">No Build Selected</h3>
-            <p className="text-center max-w-md">
-              Select a project and build above to view and manage equipment mappings.
-            </p>
+            <p className="text-center max-w-md">Select a project and build above to view and manage equipment mappings.</p>
           </CardContent>
         </Card>
       )}
 
-      {/* Satellite Edit Dialog */}
+      {/* View Detail Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-primary" />
+              Equipment Details
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">{renderViewContent()}</div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Equipment Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-primary" />
+              Edit Equipment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">{renderEditContent()}</div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={isUpdatingEquipment}>
+              {isUpdatingEquipment ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Satellite Edit Dialog - Accordion based */}
       <Dialog open={isSatelliteDialogOpen} onOpenChange={setIsSatelliteDialogOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
           <DialogHeader className="pb-4 border-b">
@@ -977,15 +792,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                     <InlineFormField label="Name"><Input value={satEditData.name || ""} onChange={(e) => setSatEditData({...satEditData, name: e.target.value})} /></InlineFormField>
                     <InlineFormField label="Position"><Input value={satEditData.position || ""} onChange={(e) => setSatEditData({...satEditData, position: e.target.value})} /></InlineFormField>
                     <InlineFormField label="Direction">
-                      <Select value={satEditData.direction || ""} onValueChange={(v) => setSatEditData({...satEditData, direction: v})}>
+                      <Select value={satEditData.direction || "none"} onValueChange={(v) => setSatEditData({...satEditData, direction: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+                        <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
                       </Select>
                     </InlineFormField>
                     <InlineFormField label="Status">
-                      <Select value={satEditData.age || ""} onValueChange={(v) => setSatEditData({...satEditData, age: v})}>
+                      <Select value={satEditData.age || "none"} onValueChange={(v) => setSatEditData({...satEditData, age: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent><SelectItem value="New">New</SelectItem><SelectItem value="Old">Old</SelectItem></SelectContent>
+                        <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="New">New</SelectItem><SelectItem value="Old">Old</SelectItem></SelectContent>
                       </Select>
                     </InlineFormField>
                   </CardContent>
@@ -999,36 +814,27 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                       const mappedLnbIds = buildMappings.filter(m => m.equipmentType === 'lnbs').map(m => m.equipmentId);
                       const mappedSwitchIds = buildMappings.filter(m => m.equipmentType === 'switches').map(m => m.equipmentId);
                       const mappedMotorIds = buildMappings.filter(m => m.equipmentType === 'motors').map(m => m.equipmentId);
-                      const filteredLnbs = allLnbs.filter(l => mappedLnbIds.includes(l.id));
-                      const filteredSwitches = allSwitches.filter(s => mappedSwitchIds.includes(s.id));
-                      const filteredMotors = allMotors.filter(m => mappedMotorIds.includes(m.id));
+                      const fLnbs = allLnbs.filter(l => mappedLnbIds.includes(l.id));
+                      const fSwitches = allSwitches.filter(s => mappedSwitchIds.includes(s.id));
+                      const fMotors = allMotors.filter(m => mappedMotorIds.includes(m.id));
                       return (
                         <>
                           <InlineFormField label="LNB">
                             <Select value={satEditData.mappedLnb || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedLnb: v === "none" ? "" : v})}>
                               <SelectTrigger><SelectValue placeholder="Select LNB" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {filteredLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}
-                              </SelectContent>
+                              <SelectContent><SelectItem value="none">None</SelectItem>{fLnbs.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.bandType})</SelectItem>)}</SelectContent>
                             </Select>
                           </InlineFormField>
                           <InlineFormField label="Switch">
                             <Select value={satEditData.mappedSwitch || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedSwitch: v === "none" ? "" : v})}>
                               <SelectTrigger><SelectValue placeholder="Select Switch" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {filteredSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}
-                              </SelectContent>
+                              <SelectContent><SelectItem value="none">None</SelectItem>{fSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.switchType}</SelectItem>)}</SelectContent>
                             </Select>
                           </InlineFormField>
                           <InlineFormField label="Motor">
                             <Select value={satEditData.mappedMotor || "none"} onValueChange={(v) => setSatEditData({...satEditData, mappedMotor: v === "none" ? "" : v})}>
                               <SelectTrigger><SelectValue placeholder="Select Motor" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {filteredMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}
-                              </SelectContent>
+                              <SelectContent><SelectItem value="none">None</SelectItem>{fMotors.map(m => <SelectItem key={m.id} value={m.id}>{m.motorType}</SelectItem>)}</SelectContent>
                             </Select>
                           </InlineFormField>
                         </>
@@ -1037,7 +843,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   </CardContent>
                 </Card>
 
-                {/* Carriers */}
+                {/* Carriers - Accordion based */}
                 <Card>
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between">
@@ -1045,56 +851,85 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                       <Button variant="outline" size="sm" onClick={addCarrierToSatEdit}><Plus className="h-3 w-3 mr-1" /> Add Carrier</Button>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {(satEditData.carriers || []).map((carrier: any, cIdx: number) => (
-                      <Card key={carrier.id || cIdx} className="border">
-                        <CardHeader className="py-2 px-4">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-sm">{carrier.name || `Carrier ${cIdx + 1}`}</CardTitle>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeCarrierFromSatEdit(cIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="px-4 pb-4 space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            <InlineFormField label="Name"><Input value={carrier.name || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'name', e.target.value)} /></InlineFormField>
-                            <InlineFormField label="Frequency"><Input value={carrier.frequency || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'frequency', e.target.value)} /></InlineFormField>
-                            <InlineFormField label="Polarization">
-                              <Select value={carrier.polarization || ""} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'polarization', v)}>
-                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent><SelectItem value="Horizontal">Horizontal</SelectItem><SelectItem value="Vertical">Vertical</SelectItem><SelectItem value="Left">Left</SelectItem><SelectItem value="Right">Right</SelectItem></SelectContent>
-                              </Select>
-                            </InlineFormField>
-                            <InlineFormField label="Symbol Rate"><Input value={carrier.symbolRate || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'symbolRate', e.target.value)} /></InlineFormField>
-                            <InlineFormField label="FEC">
-                              <Select value={carrier.fec || ""} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'fec', v)}>
-                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent><SelectItem value="Auto">Auto</SelectItem><SelectItem value="1/2">1/2</SelectItem><SelectItem value="2/3">2/3</SelectItem><SelectItem value="3/4">3/4</SelectItem><SelectItem value="5/6">5/6</SelectItem><SelectItem value="7/8">7/8</SelectItem></SelectContent>
-                              </Select>
-                            </InlineFormField>
-                          </div>
-
-                          {/* Services */}
-                          <div className="mt-3 border-t pt-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-medium">Services ({(carrier.services || []).length})</span>
-                              <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => addServiceToCarrier(cIdx)}><Plus className="h-3 w-3 mr-1" /> Service</Button>
-                            </div>
-                            {(carrier.services || []).map((svc: any, sIdx: number) => (
-                              <div key={svc.id || sIdx} className="grid grid-cols-6 gap-1 mb-2 items-center">
-                                <Input className="text-xs h-7" placeholder="Name" value={svc.name || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'name', e.target.value)} />
-                                <Input className="text-xs h-7" placeholder="Video PID" value={svc.videoPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'videoPid', e.target.value)} />
-                                <Input className="text-xs h-7" placeholder="Audio PID" value={svc.audioPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'audioPid', e.target.value)} />
-                                <Input className="text-xs h-7" placeholder="PCR PID" value={svc.pcrPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'pcrPid', e.target.value)} />
-                                <Input className="text-xs h-7" placeholder="Prog #" value={svc.programNumber || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'programNumber', e.target.value)} />
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeServiceFromCarrier(cIdx, sIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                    {(satEditData.carriers || []).length === 0 && (
+                  <CardContent>
+                    {(satEditData.carriers || []).length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">No carriers. Click "Add Carrier" to create one.</p>
+                    ) : (
+                      <Accordion type="multiple" className="w-full">
+                        {(satEditData.carriers || []).map((carrier: any, cIdx: number) => (
+                          <AccordionItem key={carrier.id || cIdx} value={carrier.id || `carrier-${cIdx}`} className="border rounded-lg mb-2">
+                            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                              <div className="flex items-center gap-3 flex-1 text-left">
+                                <span className="font-medium">{carrier.name || `Carrier ${cIdx + 1}`}</span>
+                                {carrier.frequency && <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>}
+                                <Badge variant="secondary" className="text-xs">{(carrier.services || []).length} services</Badge>
+                                <div className="ml-auto mr-2" onClick={(e) => e.stopPropagation()}>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeCarrierFromSatEdit(cIdx)}>
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-4">
+                              <div className="grid grid-cols-2 gap-2 mb-4">
+                                <InlineFormField label="Name"><Input value={carrier.name || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'name', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="Frequency"><Input value={carrier.frequency || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'frequency', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="Polarization">
+                                  <Select value={carrier.polarization || "none"} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'polarization', v === "none" ? "" : v)}>
+                                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                    <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Horizontal">Horizontal</SelectItem><SelectItem value="Vertical">Vertical</SelectItem><SelectItem value="Left">Left</SelectItem><SelectItem value="Right">Right</SelectItem></SelectContent>
+                                  </Select>
+                                </InlineFormField>
+                                <InlineFormField label="Symbol Rate"><Input value={carrier.symbolRate || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'symbolRate', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="FEC">
+                                  <Select value={carrier.fec || "none"} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'fec', v === "none" ? "" : v)}>
+                                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                    <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Auto">Auto</SelectItem><SelectItem value="1/2">1/2</SelectItem><SelectItem value="2/3">2/3</SelectItem><SelectItem value="3/4">3/4</SelectItem><SelectItem value="5/6">5/6</SelectItem><SelectItem value="7/8">7/8</SelectItem></SelectContent>
+                                  </Select>
+                                </InlineFormField>
+                              </div>
+
+                              {/* Services */}
+                              <div className="border-t pt-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-medium">Services ({(carrier.services || []).length})</span>
+                                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => addServiceToCarrier(cIdx)}><Plus className="h-3 w-3 mr-1" /> Service</Button>
+                                </div>
+                                {(carrier.services || []).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground text-center py-2">No services</p>
+                                ) : (
+                                  <div className="rounded border overflow-hidden">
+                                    <Table>
+                                      <TableHeader className="bg-muted/30">
+                                        <TableRow>
+                                          <TableHead className="text-xs py-1">Name</TableHead>
+                                          <TableHead className="text-xs py-1">Video PID</TableHead>
+                                          <TableHead className="text-xs py-1">Audio PID</TableHead>
+                                          <TableHead className="text-xs py-1">PCR PID</TableHead>
+                                          <TableHead className="text-xs py-1">Prog #</TableHead>
+                                          <TableHead className="text-xs py-1 w-10"></TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {(carrier.services || []).map((svc: any, sIdx: number) => (
+                                          <TableRow key={svc.id || sIdx}>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.name || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'name', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.videoPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'videoPid', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.audioPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'audioPid', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.pcrPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'pcrPid', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.programNumber || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'programNumber', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeServiceFromCarrier(cIdx, sIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button></TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                )}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
                     )}
                   </CardContent>
                 </Card>
@@ -1121,7 +956,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
           </DialogHeader>
           <ScrollArea className="h-[75vh]">
             <div className="space-y-6 pr-4">
-              {/* Summary */}
               <div className="grid grid-cols-5 gap-4">
                 <Card><CardContent className="p-4 text-center"><Radio className="h-6 w-6 mx-auto text-primary mb-1" /><p className="text-2xl font-bold">{getMappedEquipment().lnbs.length}</p><p className="text-xs text-muted-foreground">LNBs</p></CardContent></Card>
                 <Card><CardContent className="p-4 text-center"><Zap className="h-6 w-6 mx-auto text-primary mb-1" /><p className="text-2xl font-bold">{getMappedEquipment().switches.length}</p><p className="text-xs text-muted-foreground">Switches</p></CardContent></Card>
@@ -1129,99 +963,20 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 <Card><CardContent className="p-4 text-center"><Activity className="h-6 w-6 mx-auto text-primary mb-1" /><p className="text-2xl font-bold">{getMappedEquipment().unicables.length}</p><p className="text-xs text-muted-foreground">Unicables</p></CardContent></Card>
                 <Card><CardContent className="p-4 text-center"><Satellite className="h-6 w-6 mx-auto text-primary mb-1" /><p className="text-2xl font-bold">{getMappedEquipment().satellites.length}</p><p className="text-xs text-muted-foreground">Satellites</p></CardContent></Card>
               </div>
-
-              {/* LNBs */}
               {getMappedEquipment().lnbs.length > 0 && (
-                <Card>
-                  <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Radio className="h-4 w-4" />LNBs</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Band</TableHead><TableHead>Low Freq</TableHead><TableHead>High Freq</TableHead><TableHead>LO1(H)</TableHead><TableHead>LO1(L)</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {getMappedEquipment().lnbs.map(l => (
-                          <TableRow key={l.id}><TableCell>{l.name}</TableCell><TableCell>{l.bandType || '-'}</TableCell><TableCell>{l.lowFrequency || '-'}</TableCell><TableCell>{l.highFrequency || '-'}</TableCell><TableCell>{l.lo1High || '-'}</TableCell><TableCell>{l.lo1Low || '-'}</TableCell></TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Radio className="h-4 w-4" />LNBs</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Band</TableHead><TableHead>Low Freq</TableHead><TableHead>High Freq</TableHead><TableHead>LO1(H)</TableHead><TableHead>LO1(L)</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().lnbs.map(l => <TableRow key={l.id}><TableCell>{l.name}</TableCell><TableCell>{l.bandType || '-'}</TableCell><TableCell>{l.lowFrequency || '-'}</TableCell><TableCell>{l.highFrequency || '-'}</TableCell><TableCell>{l.lo1High || '-'}</TableCell><TableCell>{l.lo1Low || '-'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
-
-              {/* Switches */}
               {getMappedEquipment().switches.length > 0 && (
-                <Card>
-                  <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4" />Switches</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Options</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {getMappedEquipment().switches.map(s => (
-                          <TableRow key={s.id}><TableCell>{s.switchType || '-'}</TableCell><TableCell>{(s.switchOptions || []).join(', ') || '-'}</TableCell></TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4" />Switches</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Options</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().switches.map(s => <TableRow key={s.id}><TableCell>{s.switchType || '-'}</TableCell><TableCell>{(Array.isArray(s.switchOptions) ? s.switchOptions : []).join(', ') || '-'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
-
-              {/* Motors */}
               {getMappedEquipment().motors.length > 0 && (
-                <Card>
-                  <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><RotateCcw className="h-4 w-4" />Motors</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Position/Coords</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {getMappedEquipment().motors.map(m => (
-                          <TableRow key={m.id}>
-                            <TableCell>{m.motorType || '-'}</TableCell>
-                            <TableCell>{m.motorType === 'DiSEqC 1.0' ? m.position || '-' : `${m.longitude || '?'}° ${m.eastWest || ''}, ${m.latitude || '?'}° ${m.northSouth || ''}`}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><RotateCcw className="h-4 w-4" />Motors</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Position/Coords</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().motors.map(m => <TableRow key={m.id}><TableCell>{m.motorType || '-'}</TableCell><TableCell>{m.motorType === 'DiSEqC 1.0' ? m.position || '-' : `${m.longitude || '?'}° ${m.eastWest || ''}, ${m.latitude || '?'}° ${m.northSouth || ''}`}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
-
-              {/* Unicables */}
               {getMappedEquipment().unicables.length > 0 && (
-                <Card>
-                  <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />Unicables</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Port</TableHead><TableHead>Slots</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {getMappedEquipment().unicables.map(u => (
-                          <TableRow key={u.id}><TableCell>{u.unicableType || '-'}</TableCell><TableCell>{u.status || '-'}</TableCell><TableCell>{u.port || '-'}</TableCell><TableCell>{(u.ifSlots || []).length} slots</TableCell></TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />Unicables</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Port</TableHead><TableHead>Slots</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().unicables.map(u => <TableRow key={u.id}><TableCell>{u.unicableType || '-'}</TableCell><TableCell>{u.status || '-'}</TableCell><TableCell>{u.port || '-'}</TableCell><TableCell>{(u.ifSlots || []).length} slots</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
-
-              {/* Satellites */}
               {getMappedEquipment().satellites.length > 0 && (
-                <Card>
-                  <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Satellite className="h-4 w-4" />Satellites</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Position</TableHead><TableHead>Direction</TableHead><TableHead>Carriers</TableHead><TableHead>Services</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {getMappedEquipment().satellites.map(s => (
-                          <TableRow key={s.id}>
-                            <TableCell>{s.name}</TableCell>
-                            <TableCell>{s.position || '-'}</TableCell>
-                            <TableCell>{s.direction || '-'}</TableCell>
-                            <TableCell>{(s.carriers || []).length}</TableCell>
-                            <TableCell>{(s.carriers || []).reduce((sum: number, c: any) => sum + (c.services || []).length, 0)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Satellite className="h-4 w-4" />Satellites</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Position</TableHead><TableHead>Direction</TableHead><TableHead>Carriers</TableHead><TableHead>Services</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().satellites.map(s => <TableRow key={s.id}><TableCell>{s.name}</TableCell><TableCell>{s.position || '-'}</TableCell><TableCell>{s.direction || '-'}</TableCell><TableCell>{(s.carriers || []).length}</TableCell><TableCell>{(s.carriers || []).reduce((sum: number, c: any) => sum + (c.services || []).length, 0)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
             </div>
           </ScrollArea>

@@ -14,7 +14,7 @@ import {
   Package,
   ChevronDown,
   FileText,
-  Crown
+  User
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
   const [equipmentOpen, setEquipmentOpen] = useState(true);
   const filteredNavigation = navigation.filter(item => !item.adminOnly || isAdmin);
 
-  const renderNavItem = (item: typeof navigation[0], index: number) => (
+  const renderNavItem = (item: typeof navigation[0]) => (
     <Tooltip key={item.name}>
       <TooltipTrigger asChild>
         <NavLink
@@ -57,20 +57,17 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
           end={item.href === "/"}
           className={({ isActive }) =>
             cn(
-              "group flex items-center rounded-lg text-sm font-medium transition-all duration-300",
-              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              "group flex items-center rounded-xl text-sm font-medium transition-all duration-200",
               isActive
-                ? "bg-gradient-to-r from-amber-600/30 to-amber-500/10 text-amber-400 border-l-2 border-amber-400"
-                : "text-sidebar-foreground/70 hover:text-sidebar-foreground border-l-2 border-transparent",
-              collapsed ? "justify-center p-3" : "px-4 py-2.5",
-              "animate-fade-in"
+                ? "bg-primary/10 text-primary font-semibold"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              collapsed ? "justify-center p-3 mx-1" : "px-3 py-2.5 mx-2"
             )
           }
-          style={{ animationDelay: `${index * 50}ms` }}
         >
           <item.icon className={cn(
-            "transition-all duration-300 shrink-0",
-            collapsed ? "h-5 w-5" : "h-4 w-4 mr-3"
+            "shrink-0 transition-all duration-200",
+            collapsed ? "h-5 w-5" : "h-[18px] w-[18px] mr-3"
           )} />
           {!collapsed && (
             <span className="truncate text-[13px]">{item.name}</span>
@@ -78,7 +75,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
         </NavLink>
       </TooltipTrigger>
       {collapsed && (
-        <TooltipContent side="right" className="bg-popover text-popover-foreground border z-50">
+        <TooltipContent side="right" className="bg-popover text-popover-foreground border shadow-lg z-50">
           {item.name}
         </TooltipContent>
       )}
@@ -88,21 +85,18 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
   return (
     <TooltipProvider delayDuration={0}>
       <div className={cn(
-        "flex flex-col border-r transition-all duration-500 ease-in-out h-screen",
-        "bg-[hsl(225,30%,8%)] border-[hsl(225,20%,15%)]",
+        "flex flex-col border-r transition-all duration-300 ease-in-out h-screen",
+        "bg-card border-border",
         collapsed ? "w-[68px]" : "w-60"
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[hsl(225,20%,15%)] h-16">
+        <div className="flex items-center justify-between p-3 border-b border-border h-14">
           {!collapsed && (
-            <div className="flex items-center space-x-3 animate-fade-in">
-              <div className="w-9 h-9 bg-gradient-to-br from-amber-500 to-amber-700 rounded-lg flex items-center justify-center shadow-lg shadow-amber-500/20">
-                <Crown className="w-5 h-5 text-white" />
+            <div className="flex items-center space-x-2.5 pl-1">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <Satellite className="w-4 h-4 text-primary-foreground" />
               </div>
-              <div>
-                <span className="font-bold text-white text-sm tracking-wide">SDB Tool</span>
-                <p className="text-[10px] text-amber-500/70 font-medium tracking-widest uppercase">Premium</p>
-              </div>
+              <span className="font-bold text-foreground text-sm tracking-wide">SDB Tool</span>
             </div>
           )}
           <Button
@@ -110,64 +104,58 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
             size="sm"
             onClick={onToggle}
             className={cn(
-              "text-white/50 hover:text-white hover:bg-white/5 transition-all duration-300",
+              "text-muted-foreground hover:text-foreground hover:bg-muted h-8 w-8 p-0",
               collapsed && "mx-auto"
             )}
           >
-            {collapsed ? (
-              <Menu className="h-5 w-5" />
-            ) : (
-              <ChevronLeft className="h-5 w-5" />
-            )}
+            {collapsed ? <Menu className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
           {/* Dashboard */}
-          {renderNavItem(filteredNavigation[0], 0)}
+          {renderNavItem(filteredNavigation[0])}
 
           {/* Divider */}
-          <div className="my-2 mx-3 border-t border-white/5" />
+          <div className="my-2 mx-4 border-t border-border" />
 
-          {/* Global Equipment Group */}
+          {/* Equipment Group */}
           {collapsed ? (
             <div className="space-y-0.5">
-              {equipmentItems.map((item, index) => (
+              {equipmentItems.map((item) => (
                 <Tooltip key={item.name}>
                   <TooltipTrigger asChild>
                     <NavLink
                       to={item.href}
                       className={({ isActive }) =>
                         cn(
-                          "group flex items-center rounded-lg text-sm font-medium transition-all duration-300",
-                          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                          "group flex items-center rounded-xl text-sm font-medium transition-all duration-200",
                           isActive
-                            ? "bg-gradient-to-r from-amber-600/30 to-amber-500/10 text-amber-400 border-l-2 border-amber-400"
-                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground border-l-2 border-transparent",
-                          "justify-center p-3",
-                          "animate-fade-in"
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          "justify-center p-3 mx-1"
                         )
                       }
-                      style={{ animationDelay: `${(index + 1) * 50}ms` }}
                     >
-                      <item.icon className="h-5 w-5 shrink-0 transition-all duration-300" />
+                      <item.icon className="h-5 w-5 shrink-0" />
                     </NavLink>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="bg-popover text-popover-foreground border z-50">
+                  <TooltipContent side="right" className="bg-popover text-popover-foreground border shadow-lg z-50">
                     {item.name}
                   </TooltipContent>
                 </Tooltip>
               ))}
             </div>
           ) : (
-            <Collapsible open={equipmentOpen} onOpenChange={setEquipmentOpen} className="mt-0.5">
+            <Collapsible open={equipmentOpen} onOpenChange={setEquipmentOpen}>
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    "w-full flex items-center justify-between rounded-lg px-4 py-2 text-xs font-semibold uppercase tracking-wider",
-                    "text-white/40 hover:text-white/60",
-                    "transition-all duration-300"
+                    "w-full flex items-center justify-between rounded-xl px-3 py-2 mx-2 text-xs font-semibold uppercase tracking-wider",
+                    "text-muted-foreground/60 hover:text-muted-foreground",
+                    "transition-all duration-200",
+                    "w-[calc(100%-16px)]"
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -175,31 +163,28 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
                     Equipment
                   </span>
                   <ChevronDown className={cn(
-                    "h-3.5 w-3.5 transition-transform duration-300",
+                    "h-3.5 w-3.5 transition-transform duration-200",
                     equipmentOpen && "rotate-180"
                   )} />
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-0.5 pl-1 mt-0.5">
-                {equipmentItems.map((item, index) => (
+              <CollapsibleContent className="space-y-0.5">
+                {equipmentItems.map((item) => (
                   <Tooltip key={item.name}>
                     <TooltipTrigger asChild>
                       <NavLink
                         to={item.href}
                         className={({ isActive }) =>
                           cn(
-                            "group flex items-center rounded-lg text-[13px] font-medium transition-all duration-300",
-                            "hover:bg-white/5 hover:text-white",
+                            "group flex items-center rounded-xl text-[13px] font-medium transition-all duration-200",
                             isActive
-                              ? "bg-gradient-to-r from-amber-600/30 to-amber-500/10 text-amber-400 border-l-2 border-amber-400"
-                              : "text-white/50 border-l-2 border-transparent",
-                            "px-4 py-2",
-                            "animate-fade-in"
+                              ? "bg-primary/10 text-primary font-semibold"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            "px-3 py-2 mx-2 ml-4"
                           )
                         }
-                        style={{ animationDelay: `${(index + 1) * 50}ms` }}
                       >
-                        <item.icon className="h-4 w-4 mr-3 shrink-0 transition-all duration-300" />
+                        <item.icon className="h-[18px] w-[18px] mr-3 shrink-0" />
                         <span className="truncate">{item.name}</span>
                       </NavLink>
                     </TooltipTrigger>
@@ -210,22 +195,26 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
           )}
 
           {/* Divider */}
-          <div className="my-2 mx-3 border-t border-white/5" />
+          <div className="my-2 mx-4 border-t border-border" />
 
           {/* Rest of navigation */}
           <div className="space-y-0.5">
-            {filteredNavigation.slice(1).map((item, index) => renderNavItem(item, index + 5))}
+            {filteredNavigation.slice(1).map((item) => renderNavItem(item))}
           </div>
         </nav>
 
         {/* Footer */}
         {!collapsed && (
-          <div className="p-4 border-t border-[hsl(225,20%,15%)]">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              <p className="text-[10px] text-white/30 tracking-wider uppercase">
-                SDB v2.0
-              </p>
+          <div className="p-3 border-t border-border">
+            <div className="flex items-center gap-2 px-2 py-2 rounded-xl bg-muted/50">
+              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate">SDB v2.0</p>
+                <p className="text-[10px] text-muted-foreground">Active</p>
+              </div>
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
             </div>
           </div>
         )}
