@@ -387,7 +387,4 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
   );
 };
 
-// Need Settings icon import
-import { Settings } from "lucide-react";
-
 export default LNBManagement;
