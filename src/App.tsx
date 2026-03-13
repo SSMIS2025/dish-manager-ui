@@ -175,8 +175,8 @@ const App = () => {
               <main className="flex-1 overflow-y-auto">
                 <Routes>
                   <Route path="/" element={<EnhancedDashboard username={user.username} />} />
-                  <Route path="/lnb" element={<LNBManagement username={user.username} />} />
-                  <Route path="/switch" element={<SwitchManagement username={user.username} />} />
+                  <Route path="/lnb" element={<LNBManagement username={user.username} isAdmin={user.isAdmin} />} />
+                  <Route path="/switch" element={<SwitchManagement username={user.username} isAdmin={user.isAdmin} />} />
                   <Route path="/motor" element={<MotorManagement username={user.username} />} />
                   <Route path="/unicable" element={<UnicableManagement username={user.username} />} />
                   <Route path="/satellite" element={<SatelliteManagement username={user.username} />} />

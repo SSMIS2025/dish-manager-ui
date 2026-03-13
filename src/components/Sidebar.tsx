@@ -20,7 +20,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -57,9 +56,9 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
           end={item.href === "/"}
           className={({ isActive }) =>
             cn(
-              "group flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+              "group flex items-center rounded-lg text-sm font-medium transition-all duration-200",
               isActive
-                ? "bg-primary/10 text-primary font-semibold"
+                ? "bg-primary/10 text-primary font-semibold shadow-sm"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
               collapsed ? "justify-center p-3 mx-1" : "px-3 py-2.5 mx-2"
             )
@@ -130,7 +129,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
                       to={item.href}
                       className={({ isActive }) =>
                         cn(
-                          "group flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+                          "group flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                           isActive
                             ? "bg-primary/10 text-primary font-semibold"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -148,50 +147,55 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
               ))}
             </div>
           ) : (
-            <Collapsible open={equipmentOpen} onOpenChange={setEquipmentOpen}>
-              <CollapsibleTrigger asChild>
-                <button
-                  className={cn(
-                    "w-full flex items-center justify-between rounded-xl px-3 py-2 mx-2 text-xs font-semibold uppercase tracking-wider",
-                    "text-muted-foreground/60 hover:text-muted-foreground",
-                    "transition-all duration-200",
-                    "w-[calc(100%-16px)]"
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <Settings className="h-3.5 w-3.5" />
-                    Equipment
-                  </span>
-                  <ChevronDown className={cn(
-                    "h-3.5 w-3.5 transition-transform duration-200",
-                    equipmentOpen && "rotate-180"
-                  )} />
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-0.5">
-                {equipmentItems.map((item) => (
-                  <Tooltip key={item.name}>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to={item.href}
-                        className={({ isActive }) =>
-                          cn(
-                            "group flex items-center rounded-xl text-[13px] font-medium transition-all duration-200",
-                            isActive
-                              ? "bg-primary/10 text-primary font-semibold"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                            "px-3 py-2 mx-2 ml-4"
-                          )
-                        }
-                      >
-                        <item.icon className="h-[18px] w-[18px] mr-3 shrink-0" />
-                        <span className="truncate">{item.name}</span>
-                      </NavLink>
-                    </TooltipTrigger>
-                  </Tooltip>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
+            <div>
+              <button
+                onClick={() => setEquipmentOpen(!equipmentOpen)}
+                className={cn(
+                  "w-[calc(100%-16px)] flex items-center justify-between rounded-lg px-3 py-2 mx-2 text-xs font-semibold uppercase tracking-wider",
+                  "text-muted-foreground/60 hover:text-muted-foreground",
+                  "transition-all duration-200"
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="h-3.5 w-3.5" />
+                  Equipment
+                </span>
+                <ChevronDown className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-300 ease-in-out",
+                  equipmentOpen && "rotate-180"
+                )} />
+              </button>
+              <div
+                className={cn(
+                  "overflow-hidden transition-all duration-300 ease-in-out",
+                  equipmentOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+                )}
+              >
+                <div className="space-y-0.5 pt-0.5">
+                  {equipmentItems.map((item) => (
+                    <Tooltip key={item.name}>
+                      <TooltipTrigger asChild>
+                        <NavLink
+                          to={item.href}
+                          className={({ isActive }) =>
+                            cn(
+                              "group flex items-center rounded-lg text-[13px] font-medium transition-all duration-200",
+                              isActive
+                                ? "bg-primary/10 text-primary font-semibold"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              "px-3 py-2 mx-2 ml-4"
+                            )
+                          }
+                        >
+                          <item.icon className="h-[18px] w-[18px] mr-3 shrink-0" />
+                          <span className="truncate">{item.name}</span>
+                        </NavLink>
+                      </TooltipTrigger>
+                    </Tooltip>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Divider */}
@@ -206,7 +210,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
         {/* Footer */}
         {!collapsed && (
           <div className="p-3 border-t border-border">
-            <div className="flex items-center gap-2 px-2 py-2 rounded-xl bg-muted/50">
+            <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-muted/50">
               <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                 <User className="w-4 h-4 text-primary" />
               </div>

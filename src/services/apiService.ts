@@ -29,16 +29,13 @@ interface ElectronDatabaseAPI {
   getProjectMappings: (projectId: string) => Promise<ApiResponse<any[]>>;
   createProjectMapping: (data: any) => Promise<ApiResponse<void>>;
   deleteProjectMapping: (projectId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
-  // Project Builds
   getProjectBuilds: (projectId: string) => Promise<ApiResponse<any[]>>;
   createProjectBuild: (data: any) => Promise<ApiResponse<any>>;
   updateProjectBuild: (id: string, data: any) => Promise<ApiResponse<any>>;
   deleteProjectBuild: (id: string) => Promise<ApiResponse<void>>;
-  // Build Mappings
   getBuildMappings: (buildId: string) => Promise<ApiResponse<any[]>>;
   createBuildMapping: (data: any) => Promise<ApiResponse<void>>;
   deleteBuildMapping: (buildId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
-  // Activities
   getActivities: () => Promise<ApiResponse<UserActivity[]>>;
   createActivity: (data: any) => Promise<ApiResponse<void>>;
 }
@@ -79,7 +76,6 @@ class ApiService {
   private currentMode: StorageMode;
 
   constructor() {
-    // Auto-detect Electron mode
     this.currentMode = isElectron() ? 'electron' : STORAGE_MODE;
   }
 
@@ -103,22 +99,13 @@ class ApiService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options?.headers,
-        },
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
         signal: controller.signal,
         ...options,
       });
-      
       clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error) {
       console.error('API Error:', error);
@@ -141,9 +128,7 @@ class ApiService {
         try {
           const result = await electron.database.getProjects();
           return result?.success || true;
-        } catch {
-          return false;
-        }
+        } catch { return false; }
       }
       return false;
     }
@@ -151,9 +136,32 @@ class ApiService {
     return result.success;
   }
 
-  // Authentication
+  // Authentication - supports web service URL
   async verifyLogin(username: string, password: string): Promise<{ valid: boolean; isAdmin: boolean }> {
     if (this.currentMode === 'local') {
+      // Try web service first
+      try {
+        const wsUrl = `http://191.168.1.23/giwes?user=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(wsUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 0) {
+            const isOnDuty = data.empstatus === 'onduty';
+            const isQA = data.empteam === 'QA';
+            if (isOnDuty && isQA) {
+              return { valid: true, isAdmin: data.isAdmin === true };
+            }
+            return { valid: false, isAdmin: false };
+          }
+        }
+      } catch {
+        // Web service unavailable, fall back to local auth
+      }
+
+      // Fallback local users
       const users = [
         { username: "admin", password: "admin123", isAdmin: true },
         { username: "user", password: "user123", isAdmin: false },
@@ -166,11 +174,8 @@ class ApiService {
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
       if (electron) {
-        try {
-          return await electron.auth.verifyLogin(username, password);
-        } catch {
-          return { valid: false, isAdmin: false };
-        }
+        try { return await electron.auth.verifyLogin(username, password); }
+        catch { return { valid: false, isAdmin: false }; }
       }
       return { valid: false, isAdmin: false };
     }
@@ -184,525 +189,284 @@ class ApiService {
 
   // Projects
   async getProjects(): Promise<Project[]> {
-    if (this.currentMode === 'local') {
-      return storageService.getProjects();
-    }
+    if (this.currentMode === 'local') return storageService.getProjects();
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getProjects();
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getProjects()).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<Project[]>('/projects');
-    return result.data || [];
+    return (await this.fetch<Project[]>('/projects')).data || [];
   }
 
   async checkProjectDuplicate(name: string, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      const projects = storageService.getProjects();
-      return projects.some(p => p.name.toLowerCase() === name.toLowerCase() && p.id !== excludeId);
+      return storageService.checkDuplicate('projects', { name }, excludeId);
     }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.checkProjectDuplicate(name, excludeId);
-          return result.data?.exists || false;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.checkProjectDuplicate(name, excludeId)).data?.exists || false; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch<{ exists: boolean }>(`/projects/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`);
-    return result.data?.exists || false;
+    return (await this.fetch<{ exists: boolean }>(`/projects/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`)).data?.exists || false;
   }
 
   async saveProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project | null> {
-    if (this.currentMode === 'local') {
-      return storageService.saveProject(project);
-    }
+    if (this.currentMode === 'local') return storageService.saveProject(project);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createProject(project);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.createProject(project)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Project>('/projects', {
-      method: 'POST',
-      body: JSON.stringify(project),
-    });
-    return result.data || null;
+    return (await this.fetch<Project>('/projects', { method: 'POST', body: JSON.stringify(project) })).data || null;
   }
 
   async updateProject(id: string, updates: Partial<Project>): Promise<Project | null> {
-    if (this.currentMode === 'local') {
-      return storageService.updateProject(id, updates);
-    }
+    if (this.currentMode === 'local') return storageService.updateProject(id, updates);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.updateProject(id, updates);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.updateProject(id, updates)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Project>(`/projects/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-    return result.data || null;
+    return (await this.fetch<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(updates) })).data || null;
   }
 
   async deleteProject(id: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      return storageService.deleteProject(id);
-    }
+    if (this.currentMode === 'local') return storageService.deleteProject(id);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteProject(id);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteProject(id)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/projects/${id}`, { method: 'DELETE' });
-    return result.success;
+    return (await this.fetch(`/projects/${id}`, { method: 'DELETE' })).success;
   }
 
   // Equipment (Global Bucket)
   async getEquipment(type: string): Promise<Equipment[]> {
-    if (this.currentMode === 'local') {
-      return storageService.getEquipment(type);
-    }
+    if (this.currentMode === 'local') return storageService.getEquipment(type);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getEquipment(type);
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getEquipment(type)).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<Equipment[]>(`/equipment/${type}`);
-    return result.data || [];
+    return (await this.fetch<Equipment[]>(`/equipment/${type}`)).data || [];
   }
 
   async saveEquipment(type: string, equipment: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Equipment | null> {
-    if (this.currentMode === 'local') {
-      return storageService.saveEquipment(type, equipment, 'global');
-    }
+    if (this.currentMode === 'local') return storageService.saveEquipment(type, equipment, 'global');
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createEquipment(type, equipment);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.createEquipment(type, equipment)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Equipment>(`/equipment/${type}`, {
-      method: 'POST',
-      body: JSON.stringify(equipment),
-    });
-    return result.data || null;
+    return (await this.fetch<Equipment>(`/equipment/${type}`, { method: 'POST', body: JSON.stringify(equipment) })).data || null;
   }
 
   async updateEquipment(type: string, id: string, updates: Partial<Equipment>): Promise<Equipment | null> {
-    if (this.currentMode === 'local') {
-      return storageService.updateEquipment(type, id, updates);
-    }
+    if (this.currentMode === 'local') return storageService.updateEquipment(type, id, updates);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.updateEquipment(type, id, updates);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.updateEquipment(type, id, updates)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Equipment>(`/equipment/${type}/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-    return result.data || null;
+    return (await this.fetch<Equipment>(`/equipment/${type}/${id}`, { method: 'PUT', body: JSON.stringify(updates) })).data || null;
   }
 
   async deleteEquipment(type: string, id: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      return storageService.deleteEquipment(type, id);
-    }
+    if (this.currentMode === 'local') return storageService.deleteEquipment(type, id);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteEquipment(type, id);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteEquipment(type, id)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/equipment/${type}/${id}`, { method: 'DELETE' });
-    return result.success;
+    return (await this.fetch(`/equipment/${type}/${id}`, { method: 'DELETE' })).success;
   }
 
+  // Enhanced duplicate check - supports multiple fields
   async checkDuplicate(type: string, name: string, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      const equipment = storageService.getEquipment(type);
-      return equipment.some(e => e.name.toLowerCase() === name.toLowerCase() && e.id !== excludeId);
+      return storageService.checkDuplicate(type, { name }, excludeId);
     }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.checkEquipmentDuplicate(type, name, excludeId);
-          return result.data?.exists || false;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.checkEquipmentDuplicate(type, name, excludeId)).data?.exists || false; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch<{ exists: boolean }>(`/equipment/${type}/check-duplicate?name=${encodeURIComponent(name)}&excludeId=${excludeId || ''}`);
-    return result.data?.exists || false;
+    return (await this.fetch<{ exists: boolean }>(`/equipment/${type}/check-duplicate?name=${encodeURIComponent(name)}&excludeId=${excludeId || ''}`)).data?.exists || false;
   }
 
-  // Satellites with Carriers and Services
-  async getSatellites(): Promise<Equipment[]> {
+  // Multi-field duplicate check (e.g., name + frequency for LNB)
+  async checkDuplicateByFields(type: string, fields: Record<string, string>, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      return storageService.getEquipment('satellites');
+      return storageService.checkDuplicate(type, fields, excludeId);
     }
+    // For non-local modes, fall back to name-only check
+    if (fields.name) {
+      return this.checkDuplicate(type, fields.name, excludeId);
+    }
+    return false;
+  }
+
+  // Custom Types (admin-managed)
+  getCustomTypes(category: 'lnb_band' | 'switch_type' | 'motor_type'): string[] {
+    return storageService.getCustomTypes(category);
+  }
+
+  addCustomType(category: 'lnb_band' | 'switch_type' | 'motor_type', value: string): boolean {
+    return storageService.addCustomType(category, value);
+  }
+
+  deleteCustomType(category: 'lnb_band' | 'switch_type' | 'motor_type', value: string): void {
+    storageService.deleteCustomType(category, value);
+  }
+
+  // Satellites
+  async getSatellites(): Promise<Equipment[]> {
+    if (this.currentMode === 'local') return storageService.getEquipment('satellites');
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getSatellites();
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getSatellites()).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<Equipment[]>('/satellites');
-    return result.data || [];
+    return (await this.fetch<Equipment[]>('/satellites')).data || [];
   }
 
   async checkSatelliteDuplicate(name: string, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      const satellites = storageService.getEquipment('satellites');
-      return satellites.some(s => s.name.toLowerCase() === name.toLowerCase() && s.id !== excludeId);
+      return storageService.checkDuplicate('satellites', { name }, excludeId);
     }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.checkSatelliteDuplicate(name, excludeId);
-          return result.data?.exists || false;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.checkSatelliteDuplicate(name, excludeId)).data?.exists || false; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch<{ exists: boolean }>(`/satellites/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`);
-    return result.data?.exists || false;
+    return (await this.fetch<{ exists: boolean }>(`/satellites/check-duplicate?name=${encodeURIComponent(name)}${excludeId ? `&excludeId=${excludeId}` : ''}`)).data?.exists || false;
   }
 
   async saveSatellite(satellite: any): Promise<Equipment | null> {
-    if (this.currentMode === 'local') {
-      return storageService.saveEquipment('satellites', satellite, 'global');
-    }
+    if (this.currentMode === 'local') return storageService.saveEquipment('satellites', satellite, 'global');
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createSatellite(satellite);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.createSatellite(satellite)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Equipment>('/satellites', {
-      method: 'POST',
-      body: JSON.stringify(satellite),
-    });
-    return result.data || null;
+    return (await this.fetch<Equipment>('/satellites', { method: 'POST', body: JSON.stringify(satellite) })).data || null;
   }
 
   async updateSatellite(id: string, updates: any): Promise<Equipment | null> {
-    if (this.currentMode === 'local') {
-      return storageService.updateEquipment('satellites', id, updates);
-    }
+    if (this.currentMode === 'local') return storageService.updateEquipment('satellites', id, updates);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.updateSatellite(id, updates);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.updateSatellite(id, updates)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<Equipment>(`/satellites/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-    return result.data || null;
+    return (await this.fetch<Equipment>(`/satellites/${id}`, { method: 'PUT', body: JSON.stringify(updates) })).data || null;
   }
 
   async deleteSatellite(id: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      return storageService.deleteEquipment('satellites', id);
-    }
+    if (this.currentMode === 'local') return storageService.deleteEquipment('satellites', id);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteSatellite(id);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteSatellite(id)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/satellites/${id}`, { method: 'DELETE' });
-    return result.success;
+    return (await this.fetch(`/satellites/${id}`, { method: 'DELETE' })).success;
   }
 
   // Project Mappings
   async getProjectMappings(projectId: string): Promise<any[]> {
-    if (this.currentMode === 'local') {
-      const mappings = JSON.parse(localStorage.getItem('sdb_project_mappings') || '[]');
-      return mappings.filter((m: any) => m.projectId === projectId);
-    }
+    if (this.currentMode === 'local') return storageService.getProjectMappings(projectId);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getProjectMappings(projectId);
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getProjectMappings(projectId)).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<any[]>(`/project-mappings/${projectId}`);
-    return result.data || [];
+    return (await this.fetch<any[]>(`/project-mappings/${projectId}`)).data || [];
   }
 
   async addProjectMapping(projectId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      const mappingsKey = 'sdb_project_mappings';
-      const mappings = JSON.parse(localStorage.getItem(mappingsKey) || '[]');
-      const exists = mappings.some((m: any) => 
-        m.projectId === projectId && m.equipmentType === equipmentType && m.equipmentId === equipmentId
-      );
-      if (!exists) {
-        mappings.push({
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          projectId,
-          equipmentType,
-          equipmentId,
-          createdAt: new Date().toISOString()
-        });
-        localStorage.setItem(mappingsKey, JSON.stringify(mappings));
-      }
+      storageService.addProjectMapping({ projectId, equipmentType, equipmentId });
       return true;
     }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createProjectMapping({ projectId, equipmentType, equipmentId });
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.createProjectMapping({ projectId, equipmentType, equipmentId })).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch('/project-mappings', {
-      method: 'POST',
-      body: JSON.stringify({ projectId, equipmentType, equipmentId }),
-    });
-    return result.success;
+    return (await this.fetch('/project-mappings', { method: 'POST', body: JSON.stringify({ projectId, equipmentType, equipmentId }) })).success;
   }
 
   async removeProjectMapping(projectId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
     if (this.currentMode === 'local') {
-      const mappingsKey = 'sdb_project_mappings';
-      const mappings = JSON.parse(localStorage.getItem(mappingsKey) || '[]');
-      const filtered = mappings.filter((m: any) => 
-        !(m.projectId === projectId && m.equipmentType === equipmentType && m.equipmentId === equipmentId)
-      );
-      localStorage.setItem(mappingsKey, JSON.stringify(filtered));
+      storageService.removeProjectMapping(projectId, equipmentType, equipmentId);
       return true;
     }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteProjectMapping(projectId, equipmentType, equipmentId);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteProjectMapping(projectId, equipmentType, equipmentId)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/project-mappings/${projectId}/${equipmentType}/${equipmentId}`, {
-      method: 'DELETE',
-    });
-    return result.success;
+    return (await this.fetch(`/project-mappings/${projectId}/${equipmentType}/${equipmentId}`, { method: 'DELETE' })).success;
   }
 
   // BIN operations
   async generateBin(xmlData: string): Promise<{ success: boolean; data?: string; error?: string }> {
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          return await electron.bin.generate(xmlData);
-        } catch (error) {
-          return { success: false, error: String(error) };
-        }
-      }
+      if (electron) { try { return await electron.bin.generate(xmlData); } catch (error) { return { success: false, error: String(error) }; } }
     }
-    const result = await this.fetch<string>('/bin/generate', {
-      method: 'POST',
-      body: JSON.stringify({ xmlData }),
-    });
-    return result;
+    return await this.fetch<string>('/bin/generate', { method: 'POST', body: JSON.stringify({ xmlData }) });
   }
 
   async importBin(binData: string): Promise<{ success: boolean; data?: string; error?: string }> {
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          return await electron.bin.import(binData);
-        } catch (error) {
-          return { success: false, error: String(error) };
-        }
-      }
+      if (electron) { try { return await electron.bin.import(binData); } catch (error) { return { success: false, error: String(error) }; } }
     }
-    const result = await this.fetch<string>('/bin/import', {
-      method: 'POST',
-      body: JSON.stringify({ binData }),
-    });
-    return result;
+    return await this.fetch<string>('/bin/import', { method: 'POST', body: JSON.stringify({ binData }) });
   }
 
   // File operations (Electron only)
   async saveFile(data: any, filename: string, type: string): Promise<{ success: boolean; filePath?: string }> {
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.file.saveFile(data, filename, type);
-          return { success: result.success, filePath: result.data?.filePath };
-        } catch {
-          return { success: false };
-        }
-      }
+      if (electron) { try { const r = await electron.file.saveFile(data, filename, type); return { success: r.success, filePath: r.data?.filePath }; } catch { return { success: false }; } }
     }
-    // For non-electron, use browser download
     return { success: false };
   }
 
   async openFile(filters?: any[]): Promise<{ success: boolean; data?: string; filename?: string }> {
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.file.openFile(filters);
-          return { success: result.success, data: result.data?.data, filename: result.data?.filename };
-        } catch {
-          return { success: false };
-        }
-      }
+      if (electron) { try { const r = await electron.file.openFile(filters); return { success: r.success, data: r.data?.data, filename: r.data?.filename }; } catch { return { success: false }; } }
     }
     return { success: false };
   }
 
   // Create project from XML data
   async createProjectFromXML(projectData: any, createdBy: string): Promise<Project | null> {
-    const project = await this.saveProject({
-      name: projectData.name,
-      description: projectData.description || '',
-      createdBy
-    });
-    
+    const project = await this.saveProject({ name: projectData.name, description: projectData.description || '', createdBy });
     if (!project) return null;
-    
-    // Create equipment and mappings
     const equipmentTypes = ['lnbs', 'switches', 'motors', 'unicables', 'satellites'];
-    
     for (const type of equipmentTypes) {
       if (projectData[type]) {
         for (const item of projectData[type]) {
-          const saved = type === 'satellites' 
-            ? await this.saveSatellite(item)
-            : await this.saveEquipment(type, item);
-          if (saved) {
-            await this.addProjectMapping(project.id, type, saved.id);
-          }
+          const saved = type === 'satellites' ? await this.saveSatellite(item) : await this.saveEquipment(type, item);
+          if (saved) await this.addProjectMapping(project.id, type, saved.id);
         }
       }
     }
-    
     return project;
   }
 
   // Activities
   async getActivities(): Promise<UserActivity[]> {
-    if (this.currentMode === 'local') {
-      return storageService.getActivities();
-    }
+    if (this.currentMode === 'local') return storageService.getActivities();
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
       if (electron) {
         try {
           const result = await electron.database.getActivities();
-          // Handle both { data: [...] } and direct array responses
           return Array.isArray(result) ? result : (result?.data || []);
         } catch (error) {
           console.error('Failed to get activities from Electron:', error);
@@ -711,221 +475,89 @@ class ApiService {
       }
       return [];
     }
-    const result = await this.fetch<UserActivity[]>('/activities');
-    return result.data || [];
+    return (await this.fetch<UserActivity[]>('/activities')).data || [];
   }
 
   async logActivity(username: string, action: string, details: string, projectId: string): Promise<void> {
-    if (this.currentMode === 'local') {
-      storageService.logActivity(username, action, details, projectId);
-      return;
-    }
+    if (this.currentMode === 'local') { storageService.logActivity(username, action, details, projectId); return; }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          await electron.database.createActivity({ username, action, details, projectId });
-        } catch (error) {
-          console.error('Failed to log activity:', error);
-        }
-      }
+      if (electron) { try { await electron.database.createActivity({ username, action, details, projectId }); } catch (error) { console.error('Failed to log activity:', error); } }
       return;
     }
-    await this.fetch('/activities', {
-      method: 'POST',
-      body: JSON.stringify({ username, action, details, projectId }),
-    });
+    await this.fetch('/activities', { method: 'POST', body: JSON.stringify({ username, action, details, projectId }) });
   }
 
   // Project Builds
   async getProjectBuilds(projectId: string): Promise<any[]> {
-    if (this.currentMode === 'local') {
-      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
-      return builds.filter((b: any) => b.projectId === projectId);
-    }
+    if (this.currentMode === 'local') return storageService.getProjectBuilds(projectId);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getProjectBuilds(projectId);
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getProjectBuilds(projectId)).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<any[]>(`/builds/project/${projectId}`);
-    return result.data || [];
+    return (await this.fetch<any[]>(`/builds/project/${projectId}`)).data || [];
   }
 
   async createProjectBuild(data: { projectId: string; name: string; description?: string; xmlData?: string; createdBy?: string }): Promise<any | null> {
-    if (this.currentMode === 'local') {
-      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
-      const newBuild = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        ...data,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      builds.push(newBuild);
-      localStorage.setItem('sdb_project_builds', JSON.stringify(builds));
-      return newBuild;
-    }
+    if (this.currentMode === 'local') return storageService.createProjectBuild(data);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createProjectBuild(data);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.createProjectBuild(data)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<any>('/builds', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return result.data || null;
+    return (await this.fetch<any>('/builds', { method: 'POST', body: JSON.stringify(data) })).data || null;
   }
 
   async updateProjectBuild(id: string, data: any): Promise<any | null> {
-    if (this.currentMode === 'local') {
-      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
-      const index = builds.findIndex((b: any) => b.id === id);
-      if (index === -1) return null;
-      builds[index] = { ...builds[index], ...data, updatedAt: new Date().toISOString() };
-      localStorage.setItem('sdb_project_builds', JSON.stringify(builds));
-      return builds[index];
-    }
+    if (this.currentMode === 'local') return storageService.updateProjectBuild(id, data);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.updateProjectBuild(id, data);
-          return result.data || null;
-        } catch {
-          return null;
-        }
-      }
+      if (electron) { try { return (await electron.database.updateProjectBuild(id, data)).data || null; } catch { return null; } }
       return null;
     }
-    const result = await this.fetch<any>(`/builds/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    return result.data || null;
+    return (await this.fetch<any>(`/builds/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || null;
   }
 
   async deleteProjectBuild(id: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      const builds = JSON.parse(localStorage.getItem('sdb_project_builds') || '[]');
-      const filtered = builds.filter((b: any) => b.id !== id);
-      localStorage.setItem('sdb_project_builds', JSON.stringify(filtered));
-      return true;
-    }
+    if (this.currentMode === 'local') return storageService.deleteProjectBuild(id);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteProjectBuild(id);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteProjectBuild(id)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/builds/${id}`, { method: 'DELETE' });
-    return result.success;
+    return (await this.fetch(`/builds/${id}`, { method: 'DELETE' })).success;
   }
 
   // Build Mappings
   async getBuildMappings(buildId: string): Promise<any[]> {
-    if (this.currentMode === 'local') {
-      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
-      return mappings.filter((m: any) => m.buildId === buildId);
-    }
+    if (this.currentMode === 'local') return storageService.getBuildMappings(buildId);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.getBuildMappings(buildId);
-          return result.data || [];
-        } catch {
-          return [];
-        }
-      }
+      if (electron) { try { return (await electron.database.getBuildMappings(buildId)).data || []; } catch { return []; } }
       return [];
     }
-    const result = await this.fetch<any[]>(`/builds/${buildId}/mappings`);
-    return result.data || [];
+    return (await this.fetch<any[]>(`/builds/${buildId}/mappings`)).data || [];
   }
 
   async addBuildMapping(buildId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
-      const exists = mappings.some((m: any) => 
-        m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId
-      );
-      if (!exists) {
-        mappings.push({
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          buildId,
-          equipmentType,
-          equipmentId,
-          createdAt: new Date().toISOString()
-        });
-        localStorage.setItem('sdb_build_mappings', JSON.stringify(mappings));
-      }
-      return true;
-    }
+    if (this.currentMode === 'local') { storageService.addBuildMapping({ buildId, equipmentType, equipmentId }); return true; }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.createBuildMapping({ buildId, equipmentType, equipmentId });
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.createBuildMapping({ buildId, equipmentType, equipmentId })).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/builds/${buildId}/mappings`, {
-      method: 'POST',
-      body: JSON.stringify({ equipmentType, equipmentId }),
-    });
-    return result.success;
+    return (await this.fetch(`/builds/${buildId}/mappings`, { method: 'POST', body: JSON.stringify({ equipmentType, equipmentId }) })).success;
   }
 
   async removeBuildMapping(buildId: string, equipmentType: string, equipmentId: string): Promise<boolean> {
-    if (this.currentMode === 'local') {
-      const mappings = JSON.parse(localStorage.getItem('sdb_build_mappings') || '[]');
-      const filtered = mappings.filter((m: any) => 
-        !(m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId)
-      );
-      localStorage.setItem('sdb_build_mappings', JSON.stringify(filtered));
-      return true;
-    }
+    if (this.currentMode === 'local') { storageService.removeBuildMapping(buildId, equipmentType, equipmentId); return true; }
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) {
-        try {
-          const result = await electron.database.deleteBuildMapping(buildId, equipmentType, equipmentId);
-          return result.success;
-        } catch {
-          return false;
-        }
-      }
+      if (electron) { try { return (await electron.database.deleteBuildMapping(buildId, equipmentType, equipmentId)).success; } catch { return false; } }
       return false;
     }
-    const result = await this.fetch(`/builds/${buildId}/mappings/${equipmentType}/${equipmentId}`, {
-      method: 'DELETE',
-    });
-    return result.success;
+    return (await this.fetch(`/builds/${buildId}/mappings/${equipmentType}/${equipmentId}`, { method: 'DELETE' })).success;
   }
 }
 
