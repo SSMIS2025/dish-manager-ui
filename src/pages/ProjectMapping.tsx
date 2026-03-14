@@ -570,9 +570,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
-            <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
+           <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Tone Burst">Tone Burst</SelectItem><SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem><SelectItem value="DiSEqC 1.1">DiSEqC 1.1</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="none">Select</SelectItem>{["Tone Burst","DiSEqC 1.0","DiSEqC 1.1", ...apiService.getCustomTypes('switch_type')].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <div>
