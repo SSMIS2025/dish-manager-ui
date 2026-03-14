@@ -749,7 +749,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
                 <TabsContent value="lnbs">
                   <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search LNBs..." value={lnbSearch} onChange={(e) => setLnbSearch(e.target.value)} className="pl-9" /></div>
-                  {renderEquipmentTable(filteredLnbs, 'lnbs', [{ key: 'name', label: 'Name' }, { key: 'bandType', label: 'Band' }, { key: 'lowFrequency', label: 'Low Freq' }, { key: 'highFrequency', label: 'High Freq' }, { key: 'lo1High', label: 'LO1(H)' }, { key: 'lo1Low', label: 'LO1(L)' }])}
+                  {renderEquipmentTable(filteredLnbs, 'lnbs', [{ key: 'name', label: 'Name' }, { key: 'bandType', label: 'Band' }, { key: 'lowFrequency', label: 'Low Freq' }, { key: 'highFrequency', label: 'High Freq' }, { key: 'powerControl', label: 'Power' }, { key: 'khzOption', label: '22KHz' }])}
                 </TabsContent>
 
                 <TabsContent value="switches">
