@@ -56,10 +56,11 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
           end={item.href === "/"}
           className={({ isActive }) =>
             cn(
-              "group flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+              "group flex items-center rounded-lg text-[14px] font-medium transition-all duration-200",
+              "border border-transparent",
               isActive
-                ? "bg-primary/10 text-primary font-semibold shadow-sm"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-primary/10 text-primary font-semibold shadow-sm border-primary/20"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border",
               collapsed ? "justify-center p-3 mx-1" : "px-3 py-2.5 mx-2"
             )
           }
@@ -69,7 +70,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
             collapsed ? "h-5 w-5" : "h-[18px] w-[18px] mr-3"
           )} />
           {!collapsed && (
-            <span className="truncate text-[13px]">{item.name}</span>
+            <span className="truncate">{item.name}</span>
           )}
         </NavLink>
       </TooltipTrigger>
@@ -95,7 +96,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <Satellite className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="font-bold text-foreground text-sm tracking-wide">SDB Tool</span>
+              <span className="font-bold text-foreground text-[15px] tracking-wide">SDB Tool</span>
             </div>
           )}
           <Button
@@ -129,10 +130,11 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
                       to={item.href}
                       className={({ isActive }) =>
                         cn(
-                          "group flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+                          "group flex items-center rounded-lg text-[14px] font-medium transition-all duration-200",
+                          "border border-transparent",
                           isActive
-                            ? "bg-primary/10 text-primary font-semibold"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            ? "bg-primary/10 text-primary font-semibold border-primary/20"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border",
                           "justify-center p-3 mx-1"
                         )
                       }
@@ -153,7 +155,7 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
                 className={cn(
                   "w-[calc(100%-16px)] flex items-center justify-between rounded-lg px-3 py-2 mx-2 text-xs font-semibold uppercase tracking-wider",
                   "text-muted-foreground/60 hover:text-muted-foreground",
-                  "transition-all duration-200"
+                  "transition-all duration-200 border border-transparent hover:border-border"
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -168,10 +170,14 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
               <div
                 className={cn(
                   "overflow-hidden transition-all duration-300 ease-in-out",
-                  equipmentOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+                  equipmentOpen ? "max-h-[500px] opacity-100 mt-0.5" : "max-h-0 opacity-0"
                 )}
+                style={{ transitionProperty: 'max-height, opacity, padding' }}
               >
-                <div className="space-y-0.5 pt-0.5">
+                <div className={cn(
+                  "space-y-0.5 transition-all duration-300 ease-in-out",
+                  equipmentOpen ? "py-0.5" : "py-0"
+                )}>
                   {equipmentItems.map((item) => (
                     <Tooltip key={item.name}>
                       <TooltipTrigger asChild>
@@ -180,9 +186,10 @@ const Sidebar = ({ collapsed, onToggle, isAdmin }: SidebarProps) => {
                           className={({ isActive }) =>
                             cn(
                               "group flex items-center rounded-lg text-[13px] font-medium transition-all duration-200",
+                              "border border-transparent",
                               isActive
-                                ? "bg-primary/10 text-primary font-semibold"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                ? "bg-primary/10 text-primary font-semibold border-primary/20"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border",
                               "px-3 py-2 mx-2 ml-4"
                             )
                           }

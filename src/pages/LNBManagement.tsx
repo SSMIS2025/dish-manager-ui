@@ -11,6 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { EquipmentTable } from "@/components/EquipmentTable";
 import InlineFormField from "@/components/InlineFormField";
+import {
+  DEFAULT_LNB_BANDS, LNB_POWER_CONTROLS, LNB_V_CONTROLS, LNB_KHZ_OPTIONS,
+  LNB_BAND_DEFAULTS, getMergedTypes
+} from "@/config/equipmentTypes";
 
 interface LNBDevice {
   id: string;
@@ -37,40 +41,22 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
   const [formData, setFormData] = useState<Partial<LNBDevice>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Admin: manage band types
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
-  
   const nameRef = useRef<HTMLInputElement>(null);
 
-  const defaultBandTypes = ["NONE", "C-Band", "Ku-Band", "Ka-Band", "L-Band"];
-  const [bandTypes, setBandTypes] = useState<string[]>(defaultBandTypes);
-  const powerControls = ["NONE", "Auto", "13V", "18V", "Off"];
-  const vControls = ["NONE", "Enabled", "Disabled"];
-  const khzOptions = ["NONE", "Auto", "On", "Off"];
-
-  const bandDefaults: Record<string, { lowFrequency: string; highFrequency: string }> = {
-    "C-Band": { lowFrequency: "3400", highFrequency: "4200" },
-    "Ku-Band": { lowFrequency: "10700", highFrequency: "12750" },
-    "Ka-Band": { lowFrequency: "18300", highFrequency: "20200" },
-    "L-Band": { lowFrequency: "950", highFrequency: "2150" },
-    "NONE": { lowFrequency: "", highFrequency: "" },
-  };
+  const [bandTypes, setBandTypes] = useState<string[]>(DEFAULT_LNB_BANDS);
 
   const handleBandTypeChange = (value: string) => {
-    const defaults = bandDefaults[value] || { lowFrequency: "", highFrequency: "" };
+    const defaults = LNB_BAND_DEFAULTS[value] || { lowFrequency: "", highFrequency: "" };
     setFormData({ ...formData, bandType: value, lowFrequency: defaults.lowFrequency, highFrequency: defaults.highFrequency });
   };
 
-  useEffect(() => {
-    loadDevices();
-    loadCustomTypes();
-  }, []);
+  useEffect(() => { loadDevices(); loadCustomTypes(); }, []);
 
   const loadCustomTypes = () => {
     const custom = apiService.getCustomTypes('lnb_band');
-    setBandTypes([...defaultBandTypes, ...custom]);
+    setBandTypes(getMergedTypes(DEFAULT_LNB_BANDS, custom));
   };
 
   const loadDevices = async () => {
@@ -120,7 +106,6 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
     }
   };
 
-  // Custom field management
   const handleAddCustomField = () => {
     const current = formData.customFields || [];
     setFormData({ ...formData, customFields: [...current, { key: "", value: "" }] });
@@ -137,7 +122,6 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
     setFormData({ ...formData, customFields: current });
   };
 
-  // Admin: add new band type
   const handleAddBandType = () => {
     if (!newTypeName.trim()) return;
     const added = apiService.addCustomType('lnb_band', newTypeName.trim());
@@ -167,21 +151,16 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
 
   const handleSave = async () => {
     if (!validateForm()) return;
-
     setIsSaving(true);
     try {
-      // Check duplicate by name + lowFrequency
       const isDuplicate = await apiService.checkDuplicateByFields('lnbs', {
-        name: formData.name!,
-        lowFrequency: formData.lowFrequency || ""
+        name: formData.name!, lowFrequency: formData.lowFrequency || ""
       }, editingDevice?.id);
-      
       if (isDuplicate) {
         toast({ title: "Duplicate Entry", description: "An LNB with this name and frequency already exists.", variant: "destructive" });
         nameRef.current?.focus();
         return;
       }
-
       const deviceData = {
         name: formData.name!,
         bandType: formData.bandType || "",
@@ -192,17 +171,15 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
         highFrequency: formData.highFrequency || "",
         customFields: formData.customFields || []
       };
-
       if (editingDevice) {
         await apiService.updateEquipment('lnbs', editingDevice.id, deviceData);
         await apiService.logActivity(username, "LNB Updated", `Updated LNB: ${formData.name}`, 'global');
-        toast({ title: "LNB Updated", description: "The LNB device has been successfully updated." });
+        toast({ title: "LNB Updated" });
       } else {
         await apiService.saveEquipment('lnbs', deviceData);
         await apiService.logActivity(username, "LNB Added", `Added new LNB: ${formData.name}`, 'global');
-        toast({ title: "LNB Added", description: "The new LNB device has been successfully added." });
+        toast({ title: "LNB Added" });
       }
-      
       await loadDevices();
       setIsDialogOpen(false);
       setFormData({});
@@ -218,13 +195,10 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
     { key: 'lowFrequency', label: 'Low Freq' },
     { key: 'highFrequency', label: 'High Freq' },
     { 
-      key: 'customFields', 
-      label: 'Custom',
+      key: 'customFields', label: 'Custom',
       render: (value: any[]) => (
         <div className="flex flex-wrap gap-1">
-          {(value || []).slice(0, 2).map((f, i) => (
-            <Badge key={i} variant="secondary" className="text-xs">{f.key}: {f.value}</Badge>
-          ))}
+          {(value || []).slice(0, 2).map((f, i) => (<Badge key={i} variant="secondary" className="text-xs">{f.key}: {f.value}</Badge>))}
           {(value || []).length > 2 && <Badge variant="outline" className="text-xs">+{value.length - 2}</Badge>}
         </div>
       )
@@ -233,13 +207,10 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Radio className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center"><Radio className="h-5 w-5 text-primary-foreground" /></div>
             LNB Management
           </h2>
           <p className="text-muted-foreground mt-1">Global bucket - Manage all LNB devices across projects</p>
@@ -247,17 +218,9 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
         <div className="flex gap-2">
           {isAdmin && (
             <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Manage Types
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button variant="outline"><Settings className="mr-2 h-4 w-4" />Manage Types</Button></DialogTrigger>
               <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle>Manage LNB Band Types</DialogTitle>
-                  <DialogDescription>Add or remove custom band types (admin only)</DialogDescription>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Manage LNB Band Types</DialogTitle><DialogDescription>Add or remove custom band types (admin only)</DialogDescription></DialogHeader>
                 <div className="space-y-3 py-3">
                   <div className="flex gap-2">
                     <Input value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="New band type name" onKeyDown={(e) => e.key === 'Enter' && handleAddBandType()} />
@@ -268,9 +231,7 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
                     {apiService.getCustomTypes('lnb_band').map((t) => (
                       <div key={t} className="flex items-center justify-between py-1 px-2 rounded bg-muted/50">
                         <span className="text-sm">{t}</span>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleDeleteBandType(t)}>
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleDeleteBandType(t)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                       </div>
                     ))}
                     {apiService.getCustomTypes('lnb_band').length === 0 && <p className="text-xs text-muted-foreground">No custom types added</p>}
@@ -280,72 +241,50 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
             </Dialog>
           )}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90">
-                <Plus className="mr-2 h-4 w-4" />
-                Add LNB
-              </Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button onClick={handleAdd} className="bg-primary hover:bg-primary/90"><Plus className="mr-2 h-4 w-4" />Add LNB</Button></DialogTrigger>
             <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
               <DialogHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pb-4 border-b">
-                <DialogTitle className="flex items-center gap-2">
-                  <Radio className="h-5 w-5 text-primary" />
-                  {editingDevice ? "Edit LNB Device" : "Add New LNB Device"}
-                </DialogTitle>
+                <DialogTitle className="flex items-center gap-2"><Radio className="h-5 w-5 text-primary" />{editingDevice ? "Edit LNB Device" : "Add New LNB Device"}</DialogTitle>
                 <DialogDescription>Configure LNB specifications and technical parameters</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <InlineFormField label="Name" required>
-                  <Input ref={nameRef} value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Universal Ku-Band LNB" />
-                </InlineFormField>
+                <InlineFormField label="Name" required><Input ref={nameRef} value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Universal Ku-Band LNB" /></InlineFormField>
                 <InlineFormField label="Band Type">
                   <Select value={formData.bandType || "NONE"} onValueChange={handleBandTypeChange}>
                     <SelectTrigger><SelectValue placeholder="Select band type" /></SelectTrigger>
-                    <SelectContent>
-                      {bandTypes.map((band) => <SelectItem key={band} value={band}>{band}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{bandTypes.map((band) => <SelectItem key={band} value={band}>{band}</SelectItem>)}</SelectContent>
                   </Select>
                 </InlineFormField>
                 <InlineFormField label="Power Control">
                   <Select value={formData.powerControl || "NONE"} onValueChange={(v) => setFormData({ ...formData, powerControl: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{powerControls.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    <SelectContent>{LNB_POWER_CONTROLS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                   </Select>
                 </InlineFormField>
                 <InlineFormField label="V-Control">
                   <Select value={formData.vControl || "NONE"} onValueChange={(v) => setFormData({ ...formData, vControl: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{vControls.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    <SelectContent>{LNB_V_CONTROLS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                   </Select>
                 </InlineFormField>
                 <InlineFormField label="22KHz Option">
                   <Select value={formData.khzOption || "NONE"} onValueChange={(v) => setFormData({ ...formData, khzOption: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{khzOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                    <SelectContent>{LNB_KHZ_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                   </Select>
                 </InlineFormField>
-                <InlineFormField label="Low Freq (MHz)">
-                  <Input value={formData.lowFrequency || ""} onChange={(e) => setFormData({ ...formData, lowFrequency: e.target.value })} placeholder="e.g., 9750" />
-                </InlineFormField>
-                <InlineFormField label="High Freq (MHz)">
-                  <Input value={formData.highFrequency || ""} onChange={(e) => setFormData({ ...formData, highFrequency: e.target.value })} placeholder="e.g., 10600" />
-                </InlineFormField>
-
-                {/* Custom Key-Value Fields */}
+                <InlineFormField label="Low Freq (MHz)"><Input value={formData.lowFrequency || ""} onChange={(e) => setFormData({ ...formData, lowFrequency: e.target.value })} placeholder="e.g., 9750" /></InlineFormField>
+                <InlineFormField label="High Freq (MHz)"><Input value={formData.highFrequency || ""} onChange={(e) => setFormData({ ...formData, highFrequency: e.target.value })} placeholder="e.g., 10600" /></InlineFormField>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">Custom Fields</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={handleAddCustomField}>
-                      <Plus className="h-3 w-3 mr-1" /> Add Field
-                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddCustomField}><Plus className="h-3 w-3 mr-1" /> Add Field</Button>
                   </div>
                   {(formData.customFields || []).map((field, idx) => (
                     <div key={idx} className="flex gap-2 items-center">
                       <Input value={field.key} onChange={(e) => handleCustomFieldChange(idx, 'key', e.target.value)} placeholder="Key" className="flex-1" />
                       <Input value={field.value} onChange={(e) => handleCustomFieldChange(idx, 'value', e.target.value)} placeholder="Value" className="flex-1" />
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleRemoveCustomField(idx)}>
-                        <X className="h-3 w-3 text-destructive" />
-                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleRemoveCustomField(idx)}><X className="h-3 w-3 text-destructive" /></Button>
                     </div>
                   ))}
                 </div>
@@ -361,25 +300,12 @@ const LNBManagement = ({ username, isAdmin = false }: LNBManagementProps) => {
         </div>
       </div>
 
-      {/* Table */}
       <Card>
         <CardContent className="p-6">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading LNBs...</span>
-            </div>
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="ml-2 text-muted-foreground">Loading LNBs...</span></div>
           ) : (
-            <EquipmentTable
-              data={devices}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              itemsPerPage={20}
-              searchPlaceholder="Search LNBs..."
-              emptyMessage="No LNB devices found. Click 'Add LNB' to create one."
-              colorScheme="blue"
-            />
+            <EquipmentTable data={devices} columns={columns} onEdit={handleEdit} onDelete={handleDelete} itemsPerPage={20} searchPlaceholder="Search LNBs..." emptyMessage="No LNB devices found. Click 'Add LNB' to create one." colorScheme="blue" />
           )}
         </CardContent>
       </Card>

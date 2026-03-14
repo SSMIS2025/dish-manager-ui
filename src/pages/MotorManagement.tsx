@@ -34,6 +34,7 @@ const MotorManagement = ({ username }: MotorManagementProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Use global config
   const motorTypes = ["DiSEqC 1.0", "DiSEqC 1.2"];
   const eastWestOptions = ["East", "West"];
   const northSouthOptions = ["North", "South"];

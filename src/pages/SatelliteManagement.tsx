@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +16,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import InlineFormField from "@/components/InlineFormField";
 import EquipmentMappingModal from "@/components/EquipmentMappingModal";
+import {
+  SATELLITE_DIRECTIONS, POLARIZATIONS, FEC_OPTIONS, FEC_MODES
+} from "@/config/equipmentTypes";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -76,21 +80,23 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   const [satelliteFilter, setSatelliteFilter] = useState("");
   
+  // Carrier/service search in detail dialog
+  const [carrierSearch, setCarrierSearch] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+  
+  // Editing carrier/service
+  const [editingCarrier, setEditingCarrier] = useState<{ idx: number; data: Partial<Carrier> } | null>(null);
+  const [editingService, setEditingService] = useState<{ carrierIdx: number; serviceIdx: number; data: Partial<Service> } | null>(null);
+  
   const [allLnbs, setAllLnbs] = useState<any[]>([]);
   const [allSwitches, setAllSwitches] = useState<any[]>([]);
   const [allMotors, setAllMotors] = useState<any[]>([]);
   const [allUnicables, setAllUnicables] = useState<any[]>([]);
 
-  // Inline add states for carriers and services
   const [newCarrierRow, setNewCarrierRow] = useState<Partial<Carrier> | null>(null);
   const [newServiceRows, setNewServiceRows] = useState<Record<string, Partial<Service> | null>>({});
 
   const nameRef = useRef<HTMLInputElement>(null);
-
-  const directions = ["East", "West"];
-  const polarizations = ["Horizontal", "Vertical", "Left Circular", "Right Circular"];
-  const fecOptions = ["1/2", "2/3", "3/4", "5/6", "7/8", "Auto"];
-  const fecModes = ["DVB-S", "DVB-S2", "DVB-S2X", "Auto"];
 
   useEffect(() => { loadSatellites(); loadEquipment(); }, []);
 
@@ -111,7 +117,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         mappedLnb: sat.mappedLnb || "", mappedSwitch: sat.mappedSwitch || "", mappedMotor: sat.mappedMotor || ""
       }));
       setSatellites(satelliteData);
-      // Update selected satellite if it exists
       if (selectedSatellite) {
         const updated = satelliteData.find(s => s.id === selectedSatellite.id);
         if (updated) setSelectedSatellite(updated);
@@ -150,6 +155,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   const handleRowClick = (satellite: SatelliteData) => {
     setSelectedSatellite(satellite);
+    setCarrierSearch("");
+    setServiceSearch("");
     setIsDetailDialogOpen(true);
   };
 
@@ -280,6 +287,51 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     } finally { setIsSaving(false); }
   };
 
+  // Edit carrier
+  const handleEditCarrier = (idx: number) => {
+    if (!selectedSatellite) return;
+    setEditingCarrier({ idx, data: { ...selectedSatellite.carriers[idx] } });
+  };
+
+  const handleSaveCarrierEdit = async () => {
+    if (!selectedSatellite || !editingCarrier) return;
+    setIsSaving(true);
+    try {
+      const updatedCarriers = [...selectedSatellite.carriers];
+      updatedCarriers[editingCarrier.idx] = { ...updatedCarriers[editingCarrier.idx], ...editingCarrier.data } as Carrier;
+      const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+      setSelectedSatellite(updatedSatellite);
+      setEditingCarrier(null);
+      await loadSatellites();
+      toast({ title: "Carrier Updated" });
+    } finally { setIsSaving(false); }
+  };
+
+  // Edit service
+  const handleEditService = (carrierIdx: number, serviceIdx: number) => {
+    if (!selectedSatellite) return;
+    const service = selectedSatellite.carriers[carrierIdx].services[serviceIdx];
+    setEditingService({ carrierIdx, serviceIdx, data: { ...service } });
+  };
+
+  const handleSaveServiceEdit = async () => {
+    if (!selectedSatellite || !editingService) return;
+    setIsSaving(true);
+    try {
+      const updatedCarriers = [...selectedSatellite.carriers];
+      const services = [...updatedCarriers[editingService.carrierIdx].services];
+      services[editingService.serviceIdx] = { ...services[editingService.serviceIdx], ...editingService.data } as Service;
+      updatedCarriers[editingService.carrierIdx] = { ...updatedCarriers[editingService.carrierIdx], services };
+      const updatedSatellite = { ...selectedSatellite, carriers: updatedCarriers };
+      await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
+      setSelectedSatellite(updatedSatellite);
+      setEditingService(null);
+      await loadSatellites();
+      toast({ title: "Service Updated" });
+    } finally { setIsSaving(false); }
+  };
+
   const handleOpenEquipmentDialog = () => {
     if (selectedSatellite) setIsEquipmentDialogOpen(true);
   };
@@ -304,6 +356,19 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     if (type === 'switch') return item.switchType || "-";
     if (type === 'motor') return item.motorType || "-";
     return item.name || "-";
+  };
+
+  // Filter carriers and services in detail dialog
+  const getFilteredCarriers = () => {
+    if (!selectedSatellite) return [];
+    let carriers = selectedSatellite.carriers;
+    if (carrierSearch) {
+      carriers = carriers.filter(c => 
+        c.name.toLowerCase().includes(carrierSearch.toLowerCase()) ||
+        c.frequency.toLowerCase().includes(carrierSearch.toLowerCase())
+      );
+    }
+    return carriers;
   };
 
   return (
@@ -414,7 +479,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 <SelectTrigger><SelectValue placeholder="Select direction" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Select</SelectItem>
-                  {directions.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}
+                  {SATELLITE_DIRECTIONS.map((dir) => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}
                 </SelectContent>
               </Select>
             </InlineFormField>
@@ -431,7 +496,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         </DialogContent>
       </Dialog>
 
-      {/* Satellite Detail Popup - replaces the card below */}
+      {/* Satellite Detail Popup */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           {selectedSatellite && (
@@ -471,7 +536,19 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 </div>
               </div>
 
-              {/* Carriers with Accordion + inline service add */}
+              {/* Search for carriers and services */}
+              <div className="flex gap-3 mt-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search carriers..." value={carrierSearch} onChange={(e) => setCarrierSearch(e.target.value)} className="pl-9 h-9" />
+                </div>
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search services..." value={serviceSearch} onChange={(e) => setServiceSearch(e.target.value)} className="pl-9 h-9" />
+                </div>
+              </div>
+
+              {/* Carriers with Accordion */}
               <div className="flex items-center justify-between mt-4 mb-2">
                 <h3 className="font-semibold">Carriers</h3>
                 <Button size="sm" onClick={handleStartAddCarrier}>
@@ -495,7 +572,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                       <label className="text-xs text-muted-foreground">Polarization</label>
                       <Select value={newCarrierRow.polarization || "Horizontal"} onValueChange={(v) => setNewCarrierRow({ ...newCarrierRow, polarization: v })}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>{polarizations.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                        <SelectContent>{POLARIZATIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="w-24">
@@ -506,14 +583,14 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                       <label className="text-xs text-muted-foreground">FEC</label>
                       <Select value={newCarrierRow.fec || "Auto"} onValueChange={(v) => setNewCarrierRow({ ...newCarrierRow, fec: v })}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>{fecOptions.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                        <SelectContent>{FEC_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="w-24">
                       <label className="text-xs text-muted-foreground">FEC Mode</label>
                       <Select value={newCarrierRow.fecMode || "Auto"} onValueChange={(v) => setNewCarrierRow({ ...newCarrierRow, fecMode: v })}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>{fecModes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        <SelectContent>{FEC_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="flex gap-1">
@@ -528,122 +605,208 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 </div>
               )}
 
-              {selectedSatellite.carriers.length === 0 && !newCarrierRow ? (
-                <p className="text-center text-muted-foreground py-8">No carriers. Click "Add Carrier" to create one.</p>
+              {getFilteredCarriers().length === 0 && !newCarrierRow ? (
+                <p className="text-center text-muted-foreground py-8">No carriers found. Click "Add Carrier" to create one.</p>
               ) : (
                 <Accordion type="multiple" className="w-full">
-                  {selectedSatellite.carriers.map((carrier) => (
-                    <AccordionItem key={carrier.id} value={carrier.id} className="border rounded-lg mb-2">
-                      <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1 text-left">
-                          <span className="font-medium">{carrier.name}</span>
-                          <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>
-                          <Badge variant="outline" className="text-xs">{carrier.polarization}</Badge>
-                          <Badge variant="secondary" className="text-xs">{carrier.services?.length || 0} services</Badge>
-                          <div className="ml-auto flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}>
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pb-4">
-                        <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/20 rounded-lg text-sm">
-                          <div><span className="text-muted-foreground">Symbol Rate:</span> {carrier.symbolRate || '-'}</div>
-                          <div><span className="text-muted-foreground">FEC:</span> {carrier.fec || '-'}</div>
-                          <div><span className="text-muted-foreground">FEC Mode:</span> {carrier.fecMode || '-'}</div>
-                          <div><span className="text-muted-foreground">Factory Default:</span> {carrier.factoryDefault ? 'Yes' : 'No'}</div>
-                        </div>
+                  {getFilteredCarriers().map((carrier, cIdx) => {
+                    const actualIdx = selectedSatellite.carriers.findIndex(c => c.id === carrier.id);
+                    const filteredServices = serviceSearch
+                      ? carrier.services?.filter(s => s.name.toLowerCase().includes(serviceSearch.toLowerCase())) || []
+                      : carrier.services || [];
 
-                        {/* Services */}
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-medium">Services ({carrier.services?.length || 0})</h4>
-                          <Button size="sm" variant="outline" onClick={() => handleStartAddService(carrier.id)}>
-                            <Plus className="h-3 w-3 mr-1" /> Add Service
-                          </Button>
-                        </div>
-
-                        {/* Inline new service row */}
-                        {newServiceRows[carrier.id] && (
-                          <div className="border rounded-lg p-3 mb-3 bg-primary/5">
-                            <div className="flex gap-2 items-end flex-wrap">
-                              <div className="flex-1 min-w-[100px]">
-                                <label className="text-xs text-muted-foreground">Name *</label>
-                                <Input value={newServiceRows[carrier.id]?.name || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, name: e.target.value } }))} placeholder="Service name" className="h-8" />
-                              </div>
-                              <div className="w-24">
-                                <label className="text-xs text-muted-foreground">Video PID</label>
-                                <Input value={newServiceRows[carrier.id]?.videoPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, videoPid: e.target.value } }))} placeholder="5500" className="h-8" />
-                              </div>
-                              <div className="w-24">
-                                <label className="text-xs text-muted-foreground">Audio PID</label>
-                                <Input value={newServiceRows[carrier.id]?.audioPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, audioPid: e.target.value } }))} placeholder="5501" className="h-8" />
-                              </div>
-                              <div className="w-24">
-                                <label className="text-xs text-muted-foreground">PCR PID</label>
-                                <Input value={newServiceRows[carrier.id]?.pcrPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, pcrPid: e.target.value } }))} placeholder="5500" className="h-8" />
-                              </div>
-                              <div className="w-24">
-                                <label className="text-xs text-muted-foreground">Program #</label>
-                                <Input value={newServiceRows[carrier.id]?.programNumber || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, programNumber: e.target.value } }))} placeholder="6940" className="h-8" />
-                              </div>
-                              <div className="flex gap-1">
-                                <Button size="sm" className="h-8" onClick={() => handleSaveInlineService(carrier.id)} disabled={isSaving}>
-                                  <Save className="h-3 w-3 mr-1" /> Save
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-8" onClick={() => setNewServiceRows(prev => ({ ...prev, [carrier.id]: null }))}>
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
+                    return (
+                      <AccordionItem key={carrier.id} value={carrier.id} className="border rounded-lg mb-2 bg-accent/20">
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                          <div className="flex items-center gap-3 flex-1 text-left">
+                            <span className="font-medium">{carrier.name}</span>
+                            <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>
+                            <Badge variant="outline" className="text-xs">{carrier.polarization}</Badge>
+                            <Badge variant="secondary" className="text-xs">{carrier.services?.length || 0} services</Badge>
+                            <div className="ml-auto flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(actualIdx)}>
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}>
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
                             </div>
                           </div>
-                        )}
-
-                        {(carrier.services?.length || 0) === 0 && !newServiceRows[carrier.id] ? (
-                          <p className="text-sm text-muted-foreground text-center py-4">No services. Click "Add Service" to add one.</p>
-                        ) : (
-                          <div className="rounded-lg border overflow-hidden">
-                            <Table>
-                              <TableHeader className="bg-muted/50">
-                                <TableRow>
-                                  <TableHead className="w-12">#</TableHead>
-                                  <TableHead>Name</TableHead>
-                                  <TableHead>Video PID</TableHead>
-                                  <TableHead>Audio PID</TableHead>
-                                  <TableHead>PCR PID</TableHead>
-                                  <TableHead>Program #</TableHead>
-                                  <TableHead>Scramble</TableHead>
-                                  <TableHead className="w-16">Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {carrier.services?.map((service, sIdx) => (
-                                  <TableRow key={service.id} className="hover:bg-muted/30">
-                                    <TableCell>{sIdx + 1}</TableCell>
-                                    <TableCell className="font-medium">{service.name}</TableCell>
-                                    <TableCell>{service.videoPid || '-'}</TableCell>
-                                    <TableCell>{service.audioPid || '-'}</TableCell>
-                                    <TableCell>{service.pcrPid || '-'}</TableCell>
-                                    <TableCell>{service.programNumber || '-'}</TableCell>
-                                    <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
-                                    <TableCell>
-                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'service', id: service.id, carrierId: carrier.id })}>
-                                        <Trash2 className="h-3 w-3 text-destructive" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/20 rounded-lg text-sm">
+                            <div><span className="text-muted-foreground">Symbol Rate:</span> {carrier.symbolRate || '-'}</div>
+                            <div><span className="text-muted-foreground">FEC:</span> {carrier.fec || '-'}</div>
+                            <div><span className="text-muted-foreground">FEC Mode:</span> {carrier.fecMode || '-'}</div>
+                            <div><span className="text-muted-foreground">Factory Default:</span> {carrier.factoryDefault ? 'Yes' : 'No'}</div>
                           </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
+
+                          {/* Services */}
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-medium">Services ({filteredServices.length})</h4>
+                            <Button size="sm" variant="outline" onClick={() => handleStartAddService(carrier.id)}>
+                              <Plus className="h-3 w-3 mr-1" /> Add Service
+                            </Button>
+                          </div>
+
+                          {/* Inline new service row */}
+                          {newServiceRows[carrier.id] && (
+                            <div className="border rounded-lg p-3 mb-3 bg-primary/5">
+                              <div className="flex gap-2 items-end flex-wrap">
+                                <div className="flex-1 min-w-[100px]">
+                                  <label className="text-xs text-muted-foreground">Name *</label>
+                                  <Input value={newServiceRows[carrier.id]?.name || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, name: e.target.value } }))} placeholder="Service name" className="h-8" />
+                                </div>
+                                <div className="w-24">
+                                  <label className="text-xs text-muted-foreground">Video PID</label>
+                                  <Input value={newServiceRows[carrier.id]?.videoPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, videoPid: e.target.value } }))} placeholder="5500" className="h-8" />
+                                </div>
+                                <div className="w-24">
+                                  <label className="text-xs text-muted-foreground">Audio PID</label>
+                                  <Input value={newServiceRows[carrier.id]?.audioPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, audioPid: e.target.value } }))} placeholder="5501" className="h-8" />
+                                </div>
+                                <div className="w-24">
+                                  <label className="text-xs text-muted-foreground">PCR PID</label>
+                                  <Input value={newServiceRows[carrier.id]?.pcrPid || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, pcrPid: e.target.value } }))} placeholder="5500" className="h-8" />
+                                </div>
+                                <div className="w-24">
+                                  <label className="text-xs text-muted-foreground">Program #</label>
+                                  <Input value={newServiceRows[carrier.id]?.programNumber || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, programNumber: e.target.value } }))} placeholder="6940" className="h-8" />
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button size="sm" className="h-8" onClick={() => handleSaveInlineService(carrier.id)} disabled={isSaving}>
+                                    <Save className="h-3 w-3 mr-1" /> Save
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-8" onClick={() => setNewServiceRows(prev => ({ ...prev, [carrier.id]: null }))}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {filteredServices.length === 0 && !newServiceRows[carrier.id] ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">No services. Click "Add Service" to add one.</p>
+                          ) : (
+                            <div className="rounded-lg border overflow-hidden">
+                              <Table>
+                                <TableHeader className="bg-secondary/30">
+                                  <TableRow>
+                                    <TableHead className="w-12">#</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Video PID</TableHead>
+                                    <TableHead>Audio PID</TableHead>
+                                    <TableHead>PCR PID</TableHead>
+                                    <TableHead>Program #</TableHead>
+                                    <TableHead>Scramble</TableHead>
+                                    <TableHead className="w-20">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {filteredServices.map((service, sIdx) => {
+                                    const actualSvcIdx = carrier.services?.findIndex(s => s.id === service.id) ?? sIdx;
+                                    return (
+                                      <TableRow key={service.id} className="hover:bg-muted/30">
+                                        <TableCell>{sIdx + 1}</TableCell>
+                                        <TableCell className="font-medium">{service.name}</TableCell>
+                                        <TableCell>{service.videoPid || '-'}</TableCell>
+                                        <TableCell>{service.audioPid || '-'}</TableCell>
+                                        <TableCell>{service.pcrPid || '-'}</TableCell>
+                                        <TableCell>{service.programNumber || '-'}</TableCell>
+                                        <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
+                                        <TableCell>
+                                          <div className="flex gap-1">
+                                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditService(actualIdx, actualSvcIdx)}>
+                                              <Edit className="h-3 w-3" />
+                                            </Button>
+                                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'service', id: service.id, carrierId: carrier.id })}>
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
                 </Accordion>
               )}
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Carrier Dialog */}
+      <Dialog open={!!editingCarrier} onOpenChange={(open) => !open && setEditingCarrier(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle>Edit Carrier</DialogTitle>
+          </DialogHeader>
+          {editingCarrier && (
+            <div className="space-y-3 py-3">
+              <InlineFormField label="Name"><Input value={editingCarrier.data.name || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, name: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Frequency"><Input value={editingCarrier.data.frequency || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, frequency: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Polarization">
+                <Select value={editingCarrier.data.polarization || "Horizontal"} onValueChange={(v) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, polarization: v } })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{POLARIZATIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                </Select>
+              </InlineFormField>
+              <InlineFormField label="Symbol Rate"><Input value={editingCarrier.data.symbolRate || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, symbolRate: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="FEC">
+                <Select value={editingCarrier.data.fec || "Auto"} onValueChange={(v) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, fec: v } })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{FEC_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                </Select>
+              </InlineFormField>
+              <InlineFormField label="FEC Mode">
+                <Select value={editingCarrier.data.fecMode || "Auto"} onValueChange={(v) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, fecMode: v } })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{FEC_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </InlineFormField>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setEditingCarrier(null)}>Cancel</Button>
+            <Button onClick={handleSaveCarrierEdit} disabled={isSaving}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />} Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Service Dialog */}
+      <Dialog open={!!editingService} onOpenChange={(open) => !open && setEditingService(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle>Edit Service</DialogTitle>
+          </DialogHeader>
+          {editingService && (
+            <div className="space-y-3 py-3">
+              <InlineFormField label="Name"><Input value={editingService.data.name || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, name: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Video PID"><Input value={editingService.data.videoPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, videoPid: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Audio PID"><Input value={editingService.data.audioPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, audioPid: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="PCR PID"><Input value={editingService.data.pcrPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, pcrPid: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Program #"><Input value={editingService.data.programNumber || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, programNumber: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Fav Group"><Input value={editingService.data.favGroup || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, favGroup: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Preference"><Input value={editingService.data.preference || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, preference: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Scramble">
+                <div className="flex items-center gap-2 pt-2">
+                  <Checkbox checked={editingService.data.scramble || false} onCheckedChange={(v) => setEditingService({ ...editingService, data: { ...editingService.data, scramble: !!v } })} />
+                  <span className="text-sm">Scrambled</span>
+                </div>
+              </InlineFormField>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setEditingService(null)}>Cancel</Button>
+            <Button onClick={handleSaveServiceEdit} disabled={isSaving}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />} Save</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,5 +1,7 @@
 // Unified JSON-based storage service - ALL equipment in single store
 
+import type { CustomTypeCategory } from '@/config/equipmentTypes';
+
 export interface Equipment {
   id: string;
   name?: string;
@@ -28,10 +30,9 @@ export interface UserActivity {
   projectId: string;
 }
 
-// Custom equipment types stored by admin
 export interface CustomType {
   id: string;
-  category: 'lnb_band' | 'switch_type' | 'motor_type';
+  category: CustomTypeCategory;
   value: string;
   createdAt: string;
 }
@@ -49,6 +50,9 @@ interface SDBStore {
   project_builds: any[];
   activities: UserActivity[];
   custom_types: CustomType[];
+  // Mapping-scoped equipment overrides (edits in project mapping don't affect global)
+  // Key format: "{buildId}_{equipmentType}_{equipmentId}"
+  mapping_overrides: Record<string, any>;
 }
 
 const STORE_KEY = 'sdb_unified_store';
@@ -65,7 +69,6 @@ class StorageService {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        // Migrate old separate keys if unified store is empty
         return this.ensureDefaults(parsed);
       }
     } catch {}
@@ -85,11 +88,11 @@ class StorageService {
       project_builds: store.project_builds || [],
       activities: store.activities || [],
       custom_types: store.custom_types || [],
+      mapping_overrides: store.mapping_overrides || {},
     };
   }
 
   private migrateFromLegacy(): SDBStore {
-    // Migrate from old separate localStorage keys
     const parse = (key: string) => {
       try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
     };
@@ -105,9 +108,9 @@ class StorageService {
       project_builds: parse('sdb_project_builds'),
       activities: parse('sdb_activities'),
       custom_types: [],
+      mapping_overrides: {},
     };
     this.saveStore(store);
-    // Clean up old keys
     ['sdb_projects','sdb_lnbs','sdb_switches','sdb_motors','sdb_unicables','sdb_satellites',
      'sdb_project_mappings','sdb_build_mappings','sdb_project_builds','sdb_activities'].forEach(k => localStorage.removeItem(k));
     return store;
@@ -122,12 +125,12 @@ class StorageService {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Custom Types (admin-managed LNB bands, switch types, etc.)
-  getCustomTypes(category: CustomType['category']): string[] {
+  // ========== Custom Types (admin-managed) ==========
+  getCustomTypes(category: CustomTypeCategory): string[] {
     return this.store.custom_types.filter(t => t.category === category).map(t => t.value);
   }
 
-  addCustomType(category: CustomType['category'], value: string): boolean {
+  addCustomType(category: CustomTypeCategory, value: string): boolean {
     const exists = this.store.custom_types.some(t => t.category === category && t.value.toLowerCase() === value.toLowerCase());
     if (exists) return false;
     this.store.custom_types.push({ id: this.generateId(), category, value, createdAt: new Date().toISOString() });
@@ -135,12 +138,42 @@ class StorageService {
     return true;
   }
 
-  deleteCustomType(category: CustomType['category'], value: string): void {
+  deleteCustomType(category: CustomTypeCategory, value: string): void {
     this.store.custom_types = this.store.custom_types.filter(t => !(t.category === category && t.value === value));
     this.saveStore();
   }
 
-  // Projects
+  // ========== Mapping Overrides ==========
+  private overrideKey(buildId: string, type: string, id: string): string {
+    return `${buildId}_${type}_${id}`;
+  }
+
+  getMappingOverride(buildId: string, type: string, id: string): any | null {
+    return this.store.mapping_overrides[this.overrideKey(buildId, type, id)] || null;
+  }
+
+  setMappingOverride(buildId: string, type: string, id: string, data: any): void {
+    this.store.mapping_overrides[this.overrideKey(buildId, type, id)] = {
+      ...data,
+      _overrideUpdatedAt: new Date().toISOString(),
+    };
+    this.saveStore();
+  }
+
+  // Get equipment with mapping overrides applied
+  getEquipmentWithOverrides(type: string, buildId: string): Equipment[] {
+    const items = this.getEquipment(type);
+    if (!buildId) return items;
+    return items.map(item => {
+      const override = this.getMappingOverride(buildId, type, item.id);
+      if (override) {
+        return { ...item, ...override, id: item.id };
+      }
+      return item;
+    });
+  }
+
+  // ========== Projects ==========
   getProjects(): Project[] {
     return this.store.projects;
   }
@@ -167,16 +200,21 @@ class StorageService {
 
   deleteProject(id: string): boolean {
     this.store.projects = this.store.projects.filter(p => p.id !== id);
-    // Clean up mappings
     this.store.project_mappings = this.store.project_mappings.filter(m => m.projectId !== id);
     const buildIds = this.store.project_builds.filter(b => b.projectId === id).map(b => b.id);
     this.store.project_builds = this.store.project_builds.filter(b => b.projectId !== id);
     this.store.build_mappings = this.store.build_mappings.filter(m => !buildIds.includes(m.buildId));
+    // Clean up overrides for deleted builds
+    buildIds.forEach(bId => {
+      Object.keys(this.store.mapping_overrides).forEach(key => {
+        if (key.startsWith(`${bId}_`)) delete this.store.mapping_overrides[key];
+      });
+    });
     this.saveStore();
     return true;
   }
 
-  // Equipment (LNB, Switch, Motor, Unicable)
+  // ========== Equipment ==========
   getEquipment(type: string, projectId?: string): Equipment[] {
     const key = type as keyof SDBStore;
     const items = (this.store[key] as Equipment[]) || [];
@@ -210,9 +248,12 @@ class StorageService {
   deleteEquipment(type: string, id: string): boolean {
     const key = type as keyof SDBStore;
     (this.store[key] as Equipment[]) = (this.store[key] as Equipment[]).filter(e => e.id !== id);
-    // Clean up mappings
     this.store.project_mappings = this.store.project_mappings.filter(m => !(m.equipmentType === type && m.equipmentId === id));
     this.store.build_mappings = this.store.build_mappings.filter(m => !(m.equipmentType === type && m.equipmentId === id));
+    // Clean up overrides
+    Object.keys(this.store.mapping_overrides).forEach(key => {
+      if (key.endsWith(`_${type}_${id}`)) delete this.store.mapping_overrides[key];
+    });
     this.saveStore();
     return true;
   }
@@ -231,7 +272,7 @@ class StorageService {
     });
   }
 
-  // User Activities
+  // ========== User Activities ==========
   getActivities(): UserActivity[] {
     return this.store.activities;
   }
@@ -252,7 +293,7 @@ class StorageService {
     this.saveStore();
   }
 
-  // Project Mappings
+  // ========== Project Mappings ==========
   getProjectMappings(projectId: string): any[] {
     return this.store.project_mappings.filter(m => m.projectId === projectId);
   }
@@ -274,7 +315,7 @@ class StorageService {
     this.saveStore();
   }
 
-  // Project Builds
+  // ========== Project Builds ==========
   getProjectBuilds(projectId: string): any[] {
     return this.store.project_builds.filter(b => b.projectId === projectId);
   }
@@ -297,11 +338,15 @@ class StorageService {
   deleteProjectBuild(id: string): boolean {
     this.store.project_builds = this.store.project_builds.filter(b => b.id !== id);
     this.store.build_mappings = this.store.build_mappings.filter(m => m.buildId !== id);
+    // Clean up overrides for deleted build
+    Object.keys(this.store.mapping_overrides).forEach(key => {
+      if (key.startsWith(`${id}_`)) delete this.store.mapping_overrides[key];
+    });
     this.saveStore();
     return true;
   }
 
-  // Build Mappings
+  // ========== Build Mappings ==========
   getBuildMappings(buildId: string): any[] {
     return this.store.build_mappings.filter(m => m.buildId === buildId);
   }
@@ -320,10 +365,12 @@ class StorageService {
     this.store.build_mappings = this.store.build_mappings.filter(m => 
       !(m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId)
     );
+    // Clean up override
+    delete this.store.mapping_overrides[this.overrideKey(buildId, equipmentType, equipmentId)];
     this.saveStore();
   }
 
-  // Import/Export
+  // ========== Import/Export ==========
   exportProject(projectId: string): any {
     const project = this.store.projects.find(p => p.id === projectId);
     if (!project) return null;
@@ -356,7 +403,6 @@ class StorageService {
     }
   }
 
-  // Initialize with default data if empty
   initialize(): void {
     if (this.store.projects.length === 0) {
       this.saveProject({

@@ -208,8 +208,14 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!editingItem || !editingType) return;
     setIsUpdatingEquipment(true);
     try {
-      await apiService.updateEquipment(editingType, editingItem.id, editFormData);
-      toast({ title: "Updated", description: "Equipment updated successfully." });
+      // Save to mapping override instead of global equipment
+      if (selectedBuildId) {
+        apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, editFormData);
+        toast({ title: "Updated", description: "Equipment override saved for this build (global data unchanged)." });
+      } else {
+        await apiService.updateEquipment(editingType, editingItem.id, editFormData);
+        toast({ title: "Updated", description: "Equipment updated globally." });
+      }
       setEditDialogOpen(false);
       setEditingItem(null);
       loadAllEquipment();
@@ -236,8 +242,14 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!satEditData) return;
     setIsSavingSatellite(true);
     try {
-      await apiService.updateSatellite(satEditData.id, satEditData);
-      toast({ title: "Updated", description: "Satellite updated successfully." });
+      // Save to mapping override instead of global satellite
+      if (selectedBuildId) {
+        apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
+        toast({ title: "Updated", description: "Satellite override saved for this build (global data unchanged)." });
+      } else {
+        await apiService.updateSatellite(satEditData.id, satEditData);
+        toast({ title: "Updated", description: "Satellite updated globally." });
+      }
       setIsSatelliteDialogOpen(false);
       loadAllEquipment();
     } catch {
@@ -493,7 +505,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!viewingItem) return null;
     const items: { label: string; value: any }[] = [];
     if (viewingType === 'lnbs') {
-      items.push({ label: "Name", value: viewingItem.name }, { label: "Band Type", value: viewingItem.bandType }, { label: "Low Frequency", value: viewingItem.lowFrequency }, { label: "High Frequency", value: viewingItem.highFrequency }, { label: "LO1 High", value: viewingItem.lo1High }, { label: "LO1 Low", value: viewingItem.lo1Low }, { label: "Power Control", value: viewingItem.powerControl }, { label: "V Control", value: viewingItem.vControl }, { label: "22KHz", value: viewingItem.khzOption });
+      items.push({ label: "Name", value: viewingItem.name }, { label: "Band Type", value: viewingItem.bandType }, { label: "Low Frequency", value: viewingItem.lowFrequency }, { label: "High Frequency", value: viewingItem.highFrequency }, { label: "Power Control", value: viewingItem.powerControl }, { label: "V Control", value: viewingItem.vControl }, { label: "22KHz", value: viewingItem.khzOption });
     } else if (viewingType === 'switches') {
       items.push({ label: "Type", value: viewingItem.switchType }, { label: "Options", value: Array.isArray(viewingItem.switchOptions) ? viewingItem.switchOptions.join(', ') : '-' });
     } else if (viewingType === 'motors') {
@@ -521,17 +533,34 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const renderEditContent = () => {
     if (!editingItem || !editingType) return null;
     if (editingType === 'lnbs') {
+      const bandTypes = ["NONE", "C-Band", "Ku-Band", "Ka-Band", "L-Band", ...apiService.getCustomTypes('lnb_band')];
       return (
         <div className="space-y-3">
           <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
-          <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
-          <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
-          <InlineFormField label="LO1(H)"><Input value={editFormData.lo1High || ""} onChange={(e) => setEditFormData({...editFormData, lo1High: e.target.value})} /></InlineFormField>
-          <InlineFormField label="LO1(L)"><Input value={editFormData.lo1Low || ""} onChange={(e) => setEditFormData({...editFormData, lo1Low: e.target.value})} /></InlineFormField>
           <InlineFormField label="Band Type">
             <Select value={editFormData.bandType || "none"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v === "none" ? "" : v})}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="C-Band">C-Band</SelectItem><SelectItem value="Ku-Band">Ku-Band</SelectItem><SelectItem value="Ka-Band">Ka-Band</SelectItem></SelectContent>
+              <SelectContent>{bandTypes.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="Power Control">
+            <Select value={editFormData.powerControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, powerControl: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Auto","13V","18V","Off"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="V-Control">
+            <Select value={editFormData.vControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, vControl: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Enabled","Disabled"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="22KHz">
+            <Select value={editFormData.khzOption || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, khzOption: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Auto","On","Off"].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
         </div>
@@ -541,9 +570,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
-            <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
+           <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Tone Burst">Tone Burst</SelectItem><SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem><SelectItem value="DiSEqC 1.1">DiSEqC 1.1</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="none">Select</SelectItem>{["Tone Burst","DiSEqC 1.0","DiSEqC 1.1", ...apiService.getCustomTypes('switch_type')].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <div>
@@ -593,6 +622,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       );
     }
     if (editingType === 'unicables') {
+      const slots = Array.isArray(editFormData.ifSlots) ? editFormData.ifSlots : [];
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
@@ -607,6 +637,38 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <SelectContent><SelectItem value="ON">ON</SelectItem><SelectItem value="OFF">OFF</SelectItem></SelectContent>
             </Select>
           </InlineFormField>
+          {editFormData.unicableType === "DSCR" && (
+            <InlineFormField label="Port">
+              <Select value={editFormData.port || "None"} onValueChange={(v) => setEditFormData({...editFormData, port: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="None">None</SelectItem><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem></SelectContent>
+              </Select>
+            </InlineFormField>
+          )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">IF Slots ({slots.length}/32)</span>
+              <Button type="button" variant="outline" size="sm" disabled={slots.length >= 32}
+                onClick={() => setEditFormData({...editFormData, ifSlots: [...slots, { slotNumber: slots.length + 1, frequency: "" }]})}>
+                <Plus className="h-3 w-3 mr-1" /> Add Slot
+              </Button>
+            </div>
+            {slots.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
+                {slots.map((slot: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-12">Slot {slot.slotNumber || idx + 1}</span>
+                    <Input className="h-7 text-xs flex-1" value={slot.frequency || ""} placeholder="IF Frequency (MHz)"
+                      onChange={(e) => { const newSlots = [...slots]; newSlots[idx] = { ...newSlots[idx], frequency: e.target.value }; setEditFormData({...editFormData, ifSlots: newSlots}); }} />
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
+                      onClick={() => setEditFormData({...editFormData, ifSlots: slots.filter((_: any, i: number) => i !== idx).map((s: any, i: number) => ({...s, slotNumber: i + 1}))})}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -704,7 +766,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
                 <TabsContent value="lnbs">
                   <div className="relative mb-3"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search LNBs..." value={lnbSearch} onChange={(e) => setLnbSearch(e.target.value)} className="pl-9" /></div>
-                  {renderEquipmentTable(filteredLnbs, 'lnbs', [{ key: 'name', label: 'Name' }, { key: 'bandType', label: 'Band' }, { key: 'lowFrequency', label: 'Low Freq' }, { key: 'highFrequency', label: 'High Freq' }, { key: 'lo1High', label: 'LO1(H)' }, { key: 'lo1Low', label: 'LO1(L)' }])}
+                  {renderEquipmentTable(filteredLnbs, 'lnbs', [{ key: 'name', label: 'Name' }, { key: 'bandType', label: 'Band' }, { key: 'lowFrequency', label: 'Low Freq' }, { key: 'highFrequency', label: 'High Freq' }, { key: 'powerControl', label: 'Power' }, { key: 'khzOption', label: '22KHz' }])}
                 </TabsContent>
 
                 <TabsContent value="switches">
