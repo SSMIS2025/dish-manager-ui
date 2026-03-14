@@ -208,8 +208,14 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!editingItem || !editingType) return;
     setIsUpdatingEquipment(true);
     try {
-      await apiService.updateEquipment(editingType, editingItem.id, editFormData);
-      toast({ title: "Updated", description: "Equipment updated successfully." });
+      // Save to mapping override instead of global equipment
+      if (selectedBuildId) {
+        apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, editFormData);
+        toast({ title: "Updated", description: "Equipment override saved for this build (global data unchanged)." });
+      } else {
+        await apiService.updateEquipment(editingType, editingItem.id, editFormData);
+        toast({ title: "Updated", description: "Equipment updated globally." });
+      }
       setEditDialogOpen(false);
       setEditingItem(null);
       loadAllEquipment();
