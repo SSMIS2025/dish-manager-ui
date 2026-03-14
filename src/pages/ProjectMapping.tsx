@@ -505,7 +505,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!viewingItem) return null;
     const items: { label: string; value: any }[] = [];
     if (viewingType === 'lnbs') {
-      items.push({ label: "Name", value: viewingItem.name }, { label: "Band Type", value: viewingItem.bandType }, { label: "Low Frequency", value: viewingItem.lowFrequency }, { label: "High Frequency", value: viewingItem.highFrequency }, { label: "LO1 High", value: viewingItem.lo1High }, { label: "LO1 Low", value: viewingItem.lo1Low }, { label: "Power Control", value: viewingItem.powerControl }, { label: "V Control", value: viewingItem.vControl }, { label: "22KHz", value: viewingItem.khzOption });
+      items.push({ label: "Name", value: viewingItem.name }, { label: "Band Type", value: viewingItem.bandType }, { label: "Low Frequency", value: viewingItem.lowFrequency }, { label: "High Frequency", value: viewingItem.highFrequency }, { label: "Power Control", value: viewingItem.powerControl }, { label: "V Control", value: viewingItem.vControl }, { label: "22KHz", value: viewingItem.khzOption });
     } else if (viewingType === 'switches') {
       items.push({ label: "Type", value: viewingItem.switchType }, { label: "Options", value: Array.isArray(viewingItem.switchOptions) ? viewingItem.switchOptions.join(', ') : '-' });
     } else if (viewingType === 'motors') {
