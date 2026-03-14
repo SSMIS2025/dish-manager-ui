@@ -533,17 +533,34 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const renderEditContent = () => {
     if (!editingItem || !editingType) return null;
     if (editingType === 'lnbs') {
+      const bandTypes = ["NONE", "C-Band", "Ku-Band", "Ka-Band", "L-Band", ...apiService.getCustomTypes('lnb_band')];
       return (
         <div className="space-y-3">
           <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
-          <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
-          <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
-          <InlineFormField label="LO1(H)"><Input value={editFormData.lo1High || ""} onChange={(e) => setEditFormData({...editFormData, lo1High: e.target.value})} /></InlineFormField>
-          <InlineFormField label="LO1(L)"><Input value={editFormData.lo1Low || ""} onChange={(e) => setEditFormData({...editFormData, lo1Low: e.target.value})} /></InlineFormField>
           <InlineFormField label="Band Type">
             <Select value={editFormData.bandType || "none"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v === "none" ? "" : v})}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="C-Band">C-Band</SelectItem><SelectItem value="Ku-Band">Ku-Band</SelectItem><SelectItem value="Ka-Band">Ka-Band</SelectItem></SelectContent>
+              <SelectContent>{bandTypes.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
+          <InlineFormField label="Power Control">
+            <Select value={editFormData.powerControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, powerControl: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Auto","13V","18V","Off"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="V-Control">
+            <Select value={editFormData.vControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, vControl: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Enabled","Disabled"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </InlineFormField>
+          <InlineFormField label="22KHz">
+            <Select value={editFormData.khzOption || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, khzOption: v})}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["NONE","Auto","On","Off"].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
         </div>
