@@ -242,8 +242,14 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!satEditData) return;
     setIsSavingSatellite(true);
     try {
-      await apiService.updateSatellite(satEditData.id, satEditData);
-      toast({ title: "Updated", description: "Satellite updated successfully." });
+      // Save to mapping override instead of global satellite
+      if (selectedBuildId) {
+        apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
+        toast({ title: "Updated", description: "Satellite override saved for this build (global data unchanged)." });
+      } else {
+        await apiService.updateSatellite(satEditData.id, satEditData);
+        toast({ title: "Updated", description: "Satellite updated globally." });
+      }
       setIsSatelliteDialogOpen(false);
       loadAllEquipment();
     } catch {
