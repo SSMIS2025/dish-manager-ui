@@ -605,6 +605,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       );
     }
     if (editingType === 'unicables') {
+      const slots = Array.isArray(editFormData.ifSlots) ? editFormData.ifSlots : [];
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
@@ -619,6 +620,38 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <SelectContent><SelectItem value="ON">ON</SelectItem><SelectItem value="OFF">OFF</SelectItem></SelectContent>
             </Select>
           </InlineFormField>
+          {editFormData.unicableType === "DSCR" && (
+            <InlineFormField label="Port">
+              <Select value={editFormData.port || "None"} onValueChange={(v) => setEditFormData({...editFormData, port: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="None">None</SelectItem><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem></SelectContent>
+              </Select>
+            </InlineFormField>
+          )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">IF Slots ({slots.length}/32)</span>
+              <Button type="button" variant="outline" size="sm" disabled={slots.length >= 32}
+                onClick={() => setEditFormData({...editFormData, ifSlots: [...slots, { slotNumber: slots.length + 1, frequency: "" }]})}>
+                <Plus className="h-3 w-3 mr-1" /> Add Slot
+              </Button>
+            </div>
+            {slots.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
+                {slots.map((slot: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-12">Slot {slot.slotNumber || idx + 1}</span>
+                    <Input className="h-7 text-xs flex-1" value={slot.frequency || ""} placeholder="IF Frequency (MHz)"
+                      onChange={(e) => { const newSlots = [...slots]; newSlots[idx] = { ...newSlots[idx], frequency: e.target.value }; setEditFormData({...editFormData, ifSlots: newSlots}); }} />
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
+                      onClick={() => setEditFormData({...editFormData, ifSlots: slots.filter((_: any, i: number) => i !== idx).map((s: any, i: number) => ({...s, slotNumber: i + 1}))})}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
