@@ -38,6 +38,12 @@ interface ElectronDatabaseAPI {
   deleteBuildMapping: (buildId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
   getActivities: () => Promise<ApiResponse<UserActivity[]>>;
   createActivity: (data: any) => Promise<ApiResponse<void>>;
+  getCustomTypes: (category: string) => Promise<ApiResponse<any[]>>;
+  addCustomType: (category: string, value: string) => Promise<ApiResponse<void>>;
+  deleteCustomType: (category: string, value: string) => Promise<ApiResponse<void>>;
+  getUserFavorites: (username: string) => Promise<ApiResponse<string[]>>;
+  addUserFavorite: (username: string, projectId: string) => Promise<ApiResponse<void>>;
+  removeUserFavorite: (username: string, projectId: string) => Promise<ApiResponse<void>>;
 }
 
 interface ElectronAuthAPI {
@@ -227,7 +233,6 @@ class ApiService {
         try {
           const result = await electron.database.getEquipment(type);
           const items = result.data || [];
-          // Parse JSON fields that MySQL stores as strings
           return items.map(item => ({
             ...item,
             customFields: typeof item.customFields === 'string' ? (() => { try { return JSON.parse(item.customFields); } catch { return []; } })() : (item.customFields || []),
@@ -242,7 +247,6 @@ class ApiService {
   }
 
   async saveEquipment(type: string, equipment: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Equipment | null> {
-    // Stringify JSON fields for storage
     const prepared = this.prepareEquipmentForStorage(equipment);
     if (this.currentMode === 'local') return storageService.saveEquipment(type, equipment, 'global');
     if (this.currentMode === 'electron') {
@@ -298,20 +302,31 @@ class ApiService {
   async checkDuplicateByFields(type: string, fields: Record<string, string>, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') return storageService.checkDuplicate(type, fields, excludeId);
     if (fields.name) return this.checkDuplicate(type, fields.name, excludeId);
+    if (fields.switchType) return this.checkDuplicate(type, fields.switchType, excludeId);
     return false;
   }
 
-  // ========== Custom Types (admin-managed, always use localStorage) ==========
+  // ========== Custom Types (admin-managed) ==========
   getCustomTypes(category: CustomTypeCategory): string[] {
     return storageService.getCustomTypes(category);
   }
 
   addCustomType(category: CustomTypeCategory, value: string): boolean {
-    return storageService.addCustomType(category, value);
+    const result = storageService.addCustomType(category, value);
+    // Also sync to electron DB if available
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) { electron.database.addCustomType(category, value).catch(() => {}); }
+    }
+    return result;
   }
 
   deleteCustomType(category: CustomTypeCategory, value: string): void {
     storageService.deleteCustomType(category, value);
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) { electron.database.deleteCustomType(category, value).catch(() => {}); }
+    }
   }
 
   // ========== Mapping Overrides ==========
@@ -325,9 +340,34 @@ class ApiService {
 
   getEquipmentWithOverrides(type: string, buildId: string): Equipment[] {
     if (this.currentMode === 'local') return storageService.getEquipmentWithOverrides(type, buildId);
-    // For other modes, overrides are still in localStorage
     const items = storageService.getEquipmentWithOverrides(type, buildId);
     return items;
+  }
+
+  // ========== User Favorites ==========
+  getUserFavorites(username: string): string[] {
+    return storageService.getUserFavorites(username);
+  }
+
+  toggleUserFavorite(username: string, projectId: string): boolean {
+    const result = storageService.toggleUserFavorite(username, projectId);
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        if (result) { electron.database.addUserFavorite(username, projectId).catch(() => {}); }
+        else { electron.database.removeUserFavorite(username, projectId).catch(() => {}); }
+      }
+    }
+    return result;
+  }
+
+  // ========== Selected Project Persistence ==========
+  getLastSelectedProject(): string | null {
+    return storageService.getLastSelectedProject();
+  }
+
+  setLastSelectedProject(projectId: string): void {
+    storageService.setLastSelectedProject(projectId);
   }
 
   // ========== Satellites ==========
@@ -363,7 +403,7 @@ class ApiService {
     if (this.currentMode === 'local') return storageService.saveEquipment('satellites', satellite, 'global');
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) { try { return (await electron.database.createSatellite(this.prepareEquipmentForStorage(satellite))).data || null; } catch { return null; } }
+      if (electron) { try { return (await electron.database.createSatellite(satellite)).data || null; } catch { return null; } }
       return null;
     }
     return (await this.fetch<Equipment>('/satellites', { method: 'POST', body: JSON.stringify(satellite) })).data || null;
@@ -373,7 +413,7 @@ class ApiService {
     if (this.currentMode === 'local') return storageService.updateEquipment('satellites', id, updates);
     if (this.currentMode === 'electron') {
       const electron = this.getElectronAPI();
-      if (electron) { try { return (await electron.database.updateSatellite(id, this.prepareEquipmentForStorage(updates))).data || null; } catch { return null; } }
+      if (electron) { try { return (await electron.database.updateSatellite(id, updates)).data || null; } catch { return null; } }
       return null;
     }
     return (await this.fetch<Equipment>(`/satellites/${id}`, { method: 'PUT', body: JSON.stringify(updates) })).data || null;
