@@ -227,6 +227,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline carrier add
   const handleStartAddCarrier = () => {
+    if (newCarrierRow) return; // Prevent duplicate rows
     setNewCarrierRow({ name: "", frequency: "", polarization: "Horizontal", symbolRate: "", fec: "Auto", fecMode: "Auto", factoryDefault: false, services: [] });
   };
 
