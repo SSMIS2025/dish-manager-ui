@@ -257,6 +257,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline service add
   const handleStartAddService = (carrierId: string) => {
+    if (newServiceRows[carrierId]) return; // Prevent duplicate rows
     setNewServiceRows(prev => ({ ...prev, [carrierId]: { name: "", frequency: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "", favGroup: "", factoryDefault: false, preference: "", scramble: false } }));
   };
 
