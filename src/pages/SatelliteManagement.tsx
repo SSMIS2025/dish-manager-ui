@@ -343,7 +343,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     if (!selectedSatellite) return;
     const updatedSatellite = {
       ...selectedSatellite,
-      mappedLnb: mappings.lnbId || (allLnbs.length > 0 ? allLnbs[0].id : ""),
+      mappedLnb: mappings.lnbId || "",
       mappedSwitch: mappings.switchIds.join(','),
       mappedMotor: mappings.motorId
     };
