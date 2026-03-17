@@ -123,13 +123,13 @@ class MySQLDatabaseHandler {
 
   async deleteProject(id) {
     try {
-      // Delete builds and their mappings first
       const builds = await this.query('SELECT id FROM project_builds WHERE project_id = ?', [id]);
       for (const build of builds) {
         await this.query('DELETE FROM build_mappings WHERE build_id = ?', [build.id]);
       }
       await this.query('DELETE FROM project_builds WHERE project_id = ?', [id]);
       await this.query('DELETE FROM project_mappings WHERE project_id = ?', [id]);
+      await this.query('DELETE FROM user_favorites WHERE project_id = ?', [id]);
       await this.query('DELETE FROM projects WHERE id = ?', [id]);
       return { success: true };
     } catch (error) {
@@ -275,7 +275,11 @@ class MySQLDatabaseHandler {
   async checkEquipmentDuplicate(type, name, excludeId) {
     try {
       const tableName = this.getTableName(type);
-      let query = `SELECT COUNT(*) as count FROM ${tableName} WHERE LOWER(name) = LOWER(?)`;
+      // For switches, check by switch_type instead of name
+      let fieldName = 'name';
+      if (type === 'switches') fieldName = 'switch_type';
+      
+      let query = `SELECT COUNT(*) as count FROM ${tableName} WHERE LOWER(${fieldName}) = LOWER(?)`;
       const params = [name];
       if (excludeId) {
         query += ' AND id != ?';
@@ -293,7 +297,6 @@ class MySQLDatabaseHandler {
     try {
       const satellites = await this.query('SELECT * FROM satellites ORDER BY created_at DESC');
       
-      // Get carriers and services for each satellite
       for (let sat of satellites) {
         sat.carriers = await this.query('SELECT * FROM carriers WHERE satellite_id = ?', [sat.id]);
         for (let carrier of sat.carriers) {
@@ -313,11 +316,10 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'INSERT INTO satellites (id, name, position, orbital_position, polarization, direction, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', now, now]
+        'INSERT INTO satellites (id, name, position, orbital_position, polarization, direction, age, mapped_lnb, mapped_switch, mapped_motor, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', now, now]
       );
       
-      // Create carriers and services
       if (data.carriers && Array.isArray(data.carriers)) {
         for (const carrier of data.carriers) {
           await this.createCarrier(id, carrier);
@@ -332,15 +334,14 @@ class MySQLDatabaseHandler {
   }
 
   async createCarrier(satelliteId, data) {
-    const id = generateId();
+    const id = data.id && !data.id.startsWith('c-') ? data.id : generateId();
     const now = getMySQLDateTime();
     
     await this.query(
       'INSERT INTO carriers (id, satellite_id, name, frequency, symbol_rate, polarization, fec, fec_mode, factory_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || '', data.polarization || '', data.fec || '', data.fecMode || '', data.factoryDefault ? 1 : 0, now, now]
+      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || data.symbol_rate || '', data.polarization || '', data.fec || '', data.fecMode || data.fec_mode || '', data.factoryDefault ? 1 : 0, now, now]
     );
     
-    // Create services
     if (data.services && Array.isArray(data.services)) {
       for (const service of data.services) {
         await this.createService(id, service);
@@ -351,12 +352,12 @@ class MySQLDatabaseHandler {
   }
 
   async createService(carrierId, data) {
-    const id = generateId();
+    const id = data.id && !data.id.startsWith('s-') ? data.id : generateId();
     const now = getMySQLDateTime();
     
     await this.query(
-      'INSERT INTO services (id, carrier_id, name, service_type, service_id_number, video_pid, audio_pid, pcr_pid, scramble, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, carrierId, data.name || '', data.serviceType || '', data.serviceId || data.serviceIdNumber || '', data.videoPid || '', data.audioPid || '', data.pcrPid || '', data.scramble ? 1 : 0, now, now]
+      'INSERT INTO services (id, carrier_id, name, frequency, service_type, service_id_number, video_pid, audio_pid, pcr_pid, program_number, fav_group, factory_default, preference, scramble, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, carrierId, data.name || '', data.frequency || '', data.serviceType || data.service_type || '', data.serviceId || data.serviceIdNumber || data.service_id_number || '', data.videoPid || data.video_pid || '', data.audioPid || data.audio_pid || '', data.pcrPid || data.pcr_pid || '', data.programNumber || data.program_number || '', data.favGroup || data.fav_group || '', data.factoryDefault ? 1 : 0, data.preference || '', data.scramble ? 1 : 0, now, now]
     );
     
     return id;
@@ -379,11 +380,11 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'UPDATE satellites SET name = ?, position = ?, orbital_position = ?, polarization = ?, direction = ?, updated_at = ? WHERE id = ?',
-        [data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', now, id]
+        'UPDATE satellites SET name = ?, position = ?, orbital_position = ?, polarization = ?, direction = ?, age = ?, mapped_lnb = ?, mapped_switch = ?, mapped_motor = ?, updated_at = ? WHERE id = ?',
+        [data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', now, id]
       );
       
-      // Update carriers - delete and recreate for simplicity
+      // Update carriers - delete and recreate
       if (data.carriers) {
         const existingCarriers = await this.query('SELECT id FROM carriers WHERE satellite_id = ?', [id]);
         for (const carrier of existingCarriers) {
@@ -431,6 +432,70 @@ class MySQLDatabaseHandler {
       return { success: true, data: { exists: result.count > 0 } };
     } catch (error) {
       return { success: false, error: error.message, data: { exists: false } };
+    }
+  }
+
+  // Custom Types (admin-managed)
+  async getCustomTypes(category) {
+    try {
+      const rows = await this.query('SELECT * FROM custom_types WHERE category = ? ORDER BY value', [category]);
+      return { success: true, data: rows.map(r => ({ id: r.id, category: r.category, value: r.value, createdAt: r.created_at })) };
+    } catch (error) {
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
+  async addCustomType(category, value) {
+    try {
+      const [existing] = await this.query('SELECT id FROM custom_types WHERE category = ? AND LOWER(value) = LOWER(?)', [category, value]);
+      if (existing) return { success: false, error: 'Already exists' };
+      const id = generateId();
+      const now = getMySQLDateTime();
+      await this.query('INSERT INTO custom_types (id, category, value, created_at) VALUES (?, ?, ?, ?)', [id, category, value, now]);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteCustomType(category, value) {
+    try {
+      await this.query('DELETE FROM custom_types WHERE category = ? AND value = ?', [category, value]);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // User Favorites
+  async getUserFavorites(username) {
+    try {
+      const rows = await this.query('SELECT project_id FROM user_favorites WHERE username = ?', [username]);
+      return { success: true, data: rows.map(r => r.project_id) };
+    } catch (error) {
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
+  async addUserFavorite(username, projectId) {
+    try {
+      const [existing] = await this.query('SELECT id FROM user_favorites WHERE username = ? AND project_id = ?', [username, projectId]);
+      if (existing) return { success: true };
+      const id = generateId();
+      const now = getMySQLDateTime();
+      await this.query('INSERT INTO user_favorites (id, username, project_id, created_at) VALUES (?, ?, ?, ?)', [id, username, projectId, now]);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async removeUserFavorite(username, projectId) {
+    try {
+      await this.query('DELETE FROM user_favorites WHERE username = ? AND project_id = ?', [username, projectId]);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 
@@ -583,7 +648,7 @@ class MySQLDatabaseHandler {
     
     const typeFields = {
       lnbs: {
-        columns: ['name', 'low_frequency', 'high_frequency', 'lo1_high', 'lo1_low', 'band_type', 'power_control', 'v_control', 'khz_option'],
+        columns: ['name', 'low_frequency', 'high_frequency', 'lo1_high', 'lo1_low', 'band_type', 'power_control', 'v_control', 'khz_option', 'custom_fields'],
         values: [
           data.name || '',
           data.lowFrequency || data.low_frequency || '',
@@ -593,14 +658,15 @@ class MySQLDatabaseHandler {
           data.bandType || data.band_type || '',
           data.powerControl || data.power_control || '',
           data.vControl || data.v_control || '',
-          data.khzOption || data.khz_option || ''
+          data.khzOption || data.khz_option || '',
+          typeof data.customFields === 'string' ? data.customFields : JSON.stringify(data.customFields || [])
         ]
       },
       switches: {
         columns: ['switch_type', 'switch_options'],
         values: [
           data.switchType || data.switch_type || '',
-          typeof data.switchOptions === 'object' ? JSON.stringify(data.switchOptions) : (data.switch_options || '[]')
+          typeof data.switchOptions === 'string' ? data.switchOptions : JSON.stringify(data.switchOptions || [])
         ]
       },
       motors: {
@@ -620,7 +686,7 @@ class MySQLDatabaseHandler {
           data.unicableType || data.unicable_type || '',
           data.status || 'OFF',
           data.port || '',
-          typeof data.ifSlots === 'object' ? JSON.stringify(data.ifSlots) : (data.if_slots || '[]')
+          typeof data.ifSlots === 'string' ? data.ifSlots : JSON.stringify(data.ifSlots || [])
         ]
       }
     };
@@ -649,6 +715,7 @@ class MySQLDatabaseHandler {
       powerControl: 'power_control',
       vControl: 'v_control',
       khzOption: 'khz_option',
+      customFields: 'custom_fields',
       switchType: 'switch_type',
       switchOptions: 'switch_options',
       motorType: 'motor_type',
@@ -659,11 +726,11 @@ class MySQLDatabaseHandler {
     };
     
     Object.keys(data).forEach(key => {
-      if (['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at'].includes(key)) return;
+      if (['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at', 'name'].includes(key)) return;
       const dbField = fieldMap[key] || key;
       let value = data[key];
       // Stringify objects for JSON fields
-      if ((dbField === 'switch_options' || dbField === 'if_slots') && typeof value === 'object') {
+      if ((dbField === 'switch_options' || dbField === 'if_slots' || dbField === 'custom_fields') && typeof value === 'object') {
         value = JSON.stringify(value);
       }
       updates.push(`${dbField} = ?`);
@@ -716,7 +783,6 @@ class MySQLDatabaseHandler {
       updatedAt: row.updated_at
     };
     
-    // Add type-specific fields
     if (type === 'lnbs') {
       base.name = row.name;
       base.lowFrequency = row.low_frequency;
@@ -727,6 +793,9 @@ class MySQLDatabaseHandler {
       base.powerControl = row.power_control;
       base.vControl = row.v_control;
       base.khzOption = row.khz_option;
+      try {
+        base.customFields = row.custom_fields ? JSON.parse(row.custom_fields) : [];
+      } catch (e) { base.customFields = []; }
     } else if (type === 'switches') {
       base.switchType = row.switch_type;
       try {
@@ -763,7 +832,11 @@ class MySQLDatabaseHandler {
       position: row.position,
       orbitalPosition: row.orbital_position || row.position,
       polarization: row.polarization,
+      age: row.age,
       direction: row.direction,
+      mappedLnb: row.mapped_lnb || '',
+      mappedSwitch: row.mapped_switch || '',
+      mappedMotor: row.mapped_motor || '',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       carriers: (row.carriers || []).map(c => ({
@@ -778,11 +851,16 @@ class MySQLDatabaseHandler {
         services: (c.services || []).map(s => ({
           id: s.id,
           name: s.name,
+          frequency: s.frequency,
           serviceType: s.service_type,
           serviceId: s.service_id_number,
           videoPid: s.video_pid,
           audioPid: s.audio_pid,
           pcrPid: s.pcr_pid,
+          programNumber: s.program_number,
+          favGroup: s.fav_group,
+          factoryDefault: s.factory_default === 1,
+          preference: s.preference,
           scramble: s.scramble === 1
         }))
       }))

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS projects (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- LNBs table (Updated: removed lnb_type, repeat_mode; added lo1_high, lo1_low)
+-- LNBs table (includes custom_fields JSON column)
 CREATE TABLE IF NOT EXISTS lnbs (
     id VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -47,12 +47,13 @@ CREATE TABLE IF NOT EXISTS lnbs (
     power_control VARCHAR(100) DEFAULT '',
     v_control VARCHAR(100) DEFAULT '',
     khz_option VARCHAR(100) DEFAULT '',
+    custom_fields TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT NULL,
     updated_at DATETIME DEFAULT NULL,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Switches table (Updated: removed name column, new types with JSON options)
+-- Switches table
 CREATE TABLE IF NOT EXISTS switches (
     id VARCHAR(50) NOT NULL,
     switch_type VARCHAR(100) DEFAULT '',
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS switches (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Motors table (Updated: removed name, simplified to two types)
+-- Motors table
 CREATE TABLE IF NOT EXISTS motors (
     id VARCHAR(50) NOT NULL,
     motor_type VARCHAR(100) DEFAULT '',
@@ -76,7 +77,7 @@ CREATE TABLE IF NOT EXISTS motors (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Unicables table (Updated: DSCR/DCSS types with dynamic slots)
+-- Unicables table
 CREATE TABLE IF NOT EXISTS unicables (
     id VARCHAR(50) NOT NULL,
     unicable_type VARCHAR(100) DEFAULT '',
@@ -98,7 +99,7 @@ CREATE TABLE IF NOT EXISTS satellites (
     age VARCHAR(100),
     direction VARCHAR(50),
     mapped_lnb VARCHAR(50),
-    mapped_switch VARCHAR(50),
+    mapped_switch TEXT,
     mapped_motor VARCHAR(50),
     mapped_unicable VARCHAR(50),
     created_at DATETIME DEFAULT NULL,
@@ -123,7 +124,7 @@ CREATE TABLE IF NOT EXISTS carriers (
     KEY idx_satellite_id (satellite_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Services table (linked to carriers, added audio_pid)
+-- Services table (linked to carriers)
 CREATE TABLE IF NOT EXISTS services (
     id VARCHAR(50) NOT NULL,
     carrier_id VARCHAR(50) NOT NULL,
@@ -157,7 +158,7 @@ CREATE TABLE IF NOT EXISTS project_mappings (
     KEY idx_project_id (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Project Builds table (one project can have multiple builds)
+-- Project Builds table
 CREATE TABLE IF NOT EXISTS project_builds (
     id VARCHAR(50) NOT NULL,
     project_id VARCHAR(50) NOT NULL,
@@ -171,7 +172,7 @@ CREATE TABLE IF NOT EXISTS project_builds (
     KEY idx_project_id (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Build Equipment Mappings table (maps equipment to specific builds)
+-- Build Equipment Mappings table
 CREATE TABLE IF NOT EXISTS build_mappings (
     id VARCHAR(50) NOT NULL,
     build_id VARCHAR(50) NOT NULL,
@@ -181,6 +182,26 @@ CREATE TABLE IF NOT EXISTS build_mappings (
     PRIMARY KEY (id),
     UNIQUE KEY uk_build_mapping (build_id, equipment_type, equipment_id),
     KEY idx_build_id (build_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Custom types table (admin-managed LNB bands, switch types, etc.)
+CREATE TABLE IF NOT EXISTS custom_types (
+    id VARCHAR(50) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    value VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_custom_type (category, value)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- User favorites table
+CREATE TABLE IF NOT EXISTS user_favorites (
+    id VARCHAR(50) NOT NULL,
+    username VARCHAR(100) NOT NULL,
+    project_id VARCHAR(50) NOT NULL,
+    created_at DATETIME DEFAULT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_favorite (username, project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Activities/History table
