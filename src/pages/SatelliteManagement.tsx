@@ -232,7 +232,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   };
 
   const handleSaveInlineCarrier = async () => {
-    if (!selectedSatellite || !newCarrierRow?.name?.trim() || !newCarrierRow?.frequency?.trim()) {
+    if (!selectedSatellite || !newCarrierRow) return;
+    if (!newCarrierRow.name?.trim() || !newCarrierRow.frequency?.trim()) {
       toast({ title: "Validation Error", description: "Carrier name and frequency are required.", variant: "destructive" });
       return;
     }
