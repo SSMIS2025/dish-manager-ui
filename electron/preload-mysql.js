@@ -47,6 +47,16 @@ contextBridge.exposeInMainWorld('electron', {
     // Activities
     getActivities: () => ipcRenderer.invoke('db:getActivities'),
     createActivity: (data) => ipcRenderer.invoke('db:createActivity', data),
+
+    // Custom Types
+    getCustomTypes: (category) => ipcRenderer.invoke('db:getCustomTypes', category),
+    addCustomType: (category, value) => ipcRenderer.invoke('db:addCustomType', category, value),
+    deleteCustomType: (category, value) => ipcRenderer.invoke('db:deleteCustomType', category, value),
+
+    // User Favorites
+    getUserFavorites: (username) => ipcRenderer.invoke('db:getUserFavorites', username),
+    addUserFavorite: (username, projectId) => ipcRenderer.invoke('db:addUserFavorite', username, projectId),
+    removeUserFavorite: (username, projectId) => ipcRenderer.invoke('db:removeUserFavorite', username, projectId),
   },
 
   // Authentication

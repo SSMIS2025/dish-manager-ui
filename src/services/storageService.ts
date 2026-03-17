@@ -50,9 +50,9 @@ interface SDBStore {
   project_builds: any[];
   activities: UserActivity[];
   custom_types: CustomType[];
-  // Mapping-scoped equipment overrides (edits in project mapping don't affect global)
-  // Key format: "{buildId}_{equipmentType}_{equipmentId}"
   mapping_overrides: Record<string, any>;
+  user_favorites: Record<string, string[]>; // username -> [projectId]
+  last_selected_project: string; // last selected project ID
 }
 
 const STORE_KEY = 'sdb_unified_store';
@@ -89,6 +89,8 @@ class StorageService {
       activities: store.activities || [],
       custom_types: store.custom_types || [],
       mapping_overrides: store.mapping_overrides || {},
+      user_favorites: store.user_favorites || {},
+      last_selected_project: store.last_selected_project || '',
     };
   }
 
@@ -109,6 +111,8 @@ class StorageService {
       activities: parse('sdb_activities'),
       custom_types: [],
       mapping_overrides: {},
+      user_favorites: {},
+      last_selected_project: '',
     };
     this.saveStore(store);
     ['sdb_projects','sdb_lnbs','sdb_switches','sdb_motors','sdb_unicables','sdb_satellites',
@@ -160,7 +164,6 @@ class StorageService {
     this.saveStore();
   }
 
-  // Get equipment with mapping overrides applied
   getEquipmentWithOverrides(type: string, buildId: string): Equipment[] {
     const items = this.getEquipment(type);
     if (!buildId) return items;
@@ -171,6 +174,36 @@ class StorageService {
       }
       return item;
     });
+  }
+
+  // ========== User Favorites ==========
+  getUserFavorites(username: string): string[] {
+    return this.store.user_favorites[username] || [];
+  }
+
+  toggleUserFavorite(username: string, projectId: string): boolean {
+    const current = this.store.user_favorites[username] || [];
+    const idx = current.indexOf(projectId);
+    if (idx >= 0) {
+      current.splice(idx, 1);
+      this.store.user_favorites[username] = current;
+      this.saveStore();
+      return false; // removed
+    } else {
+      this.store.user_favorites[username] = [...current, projectId];
+      this.saveStore();
+      return true; // added
+    }
+  }
+
+  // ========== Last Selected Project ==========
+  getLastSelectedProject(): string | null {
+    return this.store.last_selected_project || null;
+  }
+
+  setLastSelectedProject(projectId: string): void {
+    this.store.last_selected_project = projectId;
+    this.saveStore();
   }
 
   // ========== Projects ==========
@@ -204,11 +237,14 @@ class StorageService {
     const buildIds = this.store.project_builds.filter(b => b.projectId === id).map(b => b.id);
     this.store.project_builds = this.store.project_builds.filter(b => b.projectId !== id);
     this.store.build_mappings = this.store.build_mappings.filter(m => !buildIds.includes(m.buildId));
-    // Clean up overrides for deleted builds
     buildIds.forEach(bId => {
       Object.keys(this.store.mapping_overrides).forEach(key => {
         if (key.startsWith(`${bId}_`)) delete this.store.mapping_overrides[key];
       });
+    });
+    // Clean favorites
+    Object.keys(this.store.user_favorites).forEach(username => {
+      this.store.user_favorites[username] = (this.store.user_favorites[username] || []).filter(pid => pid !== id);
     });
     this.saveStore();
     return true;
@@ -250,15 +286,13 @@ class StorageService {
     (this.store[key] as Equipment[]) = (this.store[key] as Equipment[]).filter(e => e.id !== id);
     this.store.project_mappings = this.store.project_mappings.filter(m => !(m.equipmentType === type && m.equipmentId === id));
     this.store.build_mappings = this.store.build_mappings.filter(m => !(m.equipmentType === type && m.equipmentId === id));
-    // Clean up overrides
-    Object.keys(this.store.mapping_overrides).forEach(key => {
-      if (key.endsWith(`_${type}_${id}`)) delete this.store.mapping_overrides[key];
+    Object.keys(this.store.mapping_overrides).forEach(oKey => {
+      if (oKey.endsWith(`_${type}_${id}`)) delete this.store.mapping_overrides[oKey];
     });
     this.saveStore();
     return true;
   }
 
-  // Duplicate check across all equipment
   checkDuplicate(type: string, fields: Record<string, string>, excludeId?: string): boolean {
     const key = type as keyof SDBStore;
     const items = (this.store[key] as Equipment[]) || [];
@@ -338,7 +372,6 @@ class StorageService {
   deleteProjectBuild(id: string): boolean {
     this.store.project_builds = this.store.project_builds.filter(b => b.id !== id);
     this.store.build_mappings = this.store.build_mappings.filter(m => m.buildId !== id);
-    // Clean up overrides for deleted build
     Object.keys(this.store.mapping_overrides).forEach(key => {
       if (key.startsWith(`${id}_`)) delete this.store.mapping_overrides[key];
     });
@@ -365,7 +398,6 @@ class StorageService {
     this.store.build_mappings = this.store.build_mappings.filter(m => 
       !(m.buildId === buildId && m.equipmentType === equipmentType && m.equipmentId === equipmentId)
     );
-    // Clean up override
     delete this.store.mapping_overrides[this.overrideKey(buildId, equipmentType, equipmentId)];
     this.saveStore();
   }

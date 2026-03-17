@@ -227,11 +227,13 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline carrier add
   const handleStartAddCarrier = () => {
+    if (newCarrierRow) return; // Prevent duplicate rows
     setNewCarrierRow({ name: "", frequency: "", polarization: "Horizontal", symbolRate: "", fec: "Auto", fecMode: "Auto", factoryDefault: false, services: [] });
   };
 
   const handleSaveInlineCarrier = async () => {
-    if (!selectedSatellite || !newCarrierRow?.name?.trim() || !newCarrierRow?.frequency?.trim()) {
+    if (!selectedSatellite || !newCarrierRow) return;
+    if (!newCarrierRow.name?.trim() || !newCarrierRow.frequency?.trim()) {
       toast({ title: "Validation Error", description: "Carrier name and frequency are required.", variant: "destructive" });
       return;
     }
@@ -255,6 +257,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline service add
   const handleStartAddService = (carrierId: string) => {
+    if (newServiceRows[carrierId]) return; // Prevent duplicate rows
     setNewServiceRows(prev => ({ ...prev, [carrierId]: { name: "", frequency: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "", favGroup: "", factoryDefault: false, preference: "", scramble: false } }));
   };
 
@@ -340,7 +343,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     if (!selectedSatellite) return;
     const updatedSatellite = {
       ...selectedSatellite,
-      mappedLnb: mappings.lnbId || (allLnbs.length > 0 ? allLnbs[0].id : ""),
+      mappedLnb: mappings.lnbId || "",
       mappedSwitch: mappings.switchIds.join(','),
       mappedMotor: mappings.motorId
     };
