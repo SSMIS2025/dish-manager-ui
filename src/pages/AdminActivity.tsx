@@ -39,9 +39,8 @@ const AdminActivity = () => {
       // Ensure activities is always an array of plain objects
       const safeActivities = (Array.isArray(activitiesData) ? activitiesData : []).map(a => ({
         ...a,
-        // Ensure timestamp is always a string
-        timestamp: typeof a.timestamp === 'object' && a.timestamp instanceof Date 
-          ? a.timestamp.toISOString() 
+        timestamp: a.timestamp && typeof a.timestamp === 'object' && 'toISOString' in (a.timestamp as any)
+          ? (a.timestamp as any).toISOString() 
           : String(a.timestamp || ''),
         username: String(a.username || ''),
         action: String(a.action || ''),
