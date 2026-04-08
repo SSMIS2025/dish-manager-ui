@@ -16,7 +16,6 @@ const AdminActivity = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   
-  // Filters
   const [usernameFilter, setUsernameFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -37,10 +36,26 @@ const AdminActivity = () => {
         apiService.getProjects()
       ]);
       
-      setActivities(activitiesData);
-      setProjects(projectsData);
+      // Ensure activities is always an array of plain objects
+      const safeActivities = (Array.isArray(activitiesData) ? activitiesData : []).map(a => ({
+        ...a,
+        // Ensure timestamp is always a string
+        timestamp: typeof a.timestamp === 'object' && a.timestamp instanceof Date 
+          ? a.timestamp.toISOString() 
+          : String(a.timestamp || ''),
+        username: String(a.username || ''),
+        action: String(a.action || ''),
+        details: String(a.details || ''),
+        projectId: String(a.projectId || ''),
+        id: String(a.id || ''),
+      }));
+      
+      setActivities(safeActivities);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
     } catch (error) {
       console.error('Failed to load data:', error);
+      setActivities([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -82,17 +97,21 @@ const AdminActivity = () => {
   };
 
   const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const day = date.getDate().toString().padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[date.getMonth()];
-    const year = date.getFullYear().toString().slice(-2);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
-    
-    return `${day}${month}${year} ${hours}:${minutes}:${seconds}`;
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return String(timestamp);
+      const day = date.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const year = date.getFullYear().toString().slice(-2);
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const seconds = date.getSeconds().toString().padStart(2, '0');
+      return `${day}${month}${year} ${hours}:${minutes}:${seconds}`;
+    } catch {
+      return String(timestamp);
+    }
   };
 
   const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
@@ -122,7 +141,6 @@ const AdminActivity = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <Card className="bg-gradient-to-r from-primary/5 to-accent/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -170,7 +188,6 @@ const AdminActivity = () => {
         </CardContent>
       </Card>
 
-      {/* Activity List */}
       <div className="space-y-4">
         {paginatedActivities.length === 0 ? (
           <Card>
@@ -183,7 +200,7 @@ const AdminActivity = () => {
         ) : (
           paginatedActivities.map((activity, index) => (
             <Card 
-              key={activity.id} 
+              key={activity.id || index} 
               className="animate-fade-in hover:shadow-md transition-shadow"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
@@ -207,7 +224,7 @@ const AdminActivity = () => {
                       </CardDescription>
                     </div>
                   </div>
-                  <Badge variant={getActionColor(activity.action)}>
+                  <Badge variant={getActionColor(activity.action) as any}>
                     {activity.action}
                   </Badge>
                 </div>
@@ -222,7 +239,7 @@ const AdminActivity = () => {
                   </p>
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <span>Activity ID: {activity.id}</span>
-                    <span>Timestamp: {activity.timestamp}</span>
+                    <span>Timestamp: {formatTimestamp(activity.timestamp)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -231,7 +248,6 @@ const AdminActivity = () => {
         )}
       </div>
 
-      {/* Pagination */}
       {filteredActivities.length > itemsPerPage && (
         <PaginationCustom
           currentPage={currentPage}
@@ -240,7 +256,6 @@ const AdminActivity = () => {
         />
       )}
 
-      {/* Summary Stats */}
       <Card className="bg-gradient-to-r from-accent/5 to-primary/5">
         <CardHeader>
           <CardTitle>Summary Statistics</CardTitle>
