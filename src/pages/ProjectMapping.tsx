@@ -19,6 +19,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import { exportService } from "@/services/exportService";
 import InlineFormField from "@/components/InlineFormField";
+import {
+  DEFAULT_LNB_BANDS, LNB_POWER_CONTROLS, LNB_V_CONTROLS, LNB_KHZ_OPTIONS,
+  DEFAULT_SWITCH_TYPES, DEFAULT_MOTOR_TYPES, MOTOR_EAST_WEST, MOTOR_NORTH_SOUTH,
+  DEFAULT_UNICABLE_TYPES, UNICABLE_STATUS_OPTIONS, UNICABLE_PORT_OPTIONS,
+  SATELLITE_DIRECTIONS, POLARIZATIONS, FEC_OPTIONS, getMergedTypes
+} from "@/config/equipmentTypes";
 
 interface ProjectMappingProps {
   username: string;
@@ -68,6 +74,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [unicableSearch, setUnicableSearch] = useState("");
   const [satelliteSearch, setSatelliteSearch] = useState("");
   
+  // Controlled tab state - persists across interactions
+  const [activeTab, setActiveTab] = useState("lnbs");
+  
   // Edit popup state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -85,6 +94,12 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [isSavingSatellite, setIsSavingSatellite] = useState(false);
   
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+
+  // Global merged types
+  const lnbBandTypes = getMergedTypes(DEFAULT_LNB_BANDS, apiService.getCustomTypes('lnb_band'));
+  const switchTypes = getMergedTypes(DEFAULT_SWITCH_TYPES, apiService.getCustomTypes('switch_type'));
+  const motorTypes = getMergedTypes(DEFAULT_MOTOR_TYPES, apiService.getCustomTypes('motor_type'));
+  const unicableTypes = getMergedTypes(DEFAULT_UNICABLE_TYPES, apiService.getCustomTypes('unicable_type'));
 
   useEffect(() => {
     loadProjects();
@@ -208,17 +223,32 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!editingItem || !editingType) return;
     setIsUpdatingEquipment(true);
     try {
-      // Save to mapping override instead of global equipment
+      // Save as mapping override - stored separately, doesn't affect global
       if (selectedBuildId) {
-        apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, editFormData);
+        const overrideData = { ...editFormData };
+        // Store override via apiService (handles localStorage + electron IPC)
+        apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, overrideData);
+        
+        // Update local state immediately so UI reflects the edit
+        const updateLocalState = (setter: React.Dispatch<React.SetStateAction<any[]>>) => {
+          setter(prev => prev.map(item => 
+            item.id === editingItem.id ? { ...item, ...overrideData, id: item.id } : item
+          ));
+        };
+        
+        if (editingType === 'lnbs') updateLocalState(setAllLnbs);
+        else if (editingType === 'switches') updateLocalState(setAllSwitches);
+        else if (editingType === 'motors') updateLocalState(setAllMotors);
+        else if (editingType === 'unicables') updateLocalState(setAllUnicables);
+        
         toast({ title: "Updated", description: "Equipment override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateEquipment(editingType, editingItem.id, editFormData);
+        await loadAllEquipment();
         toast({ title: "Updated", description: "Equipment updated globally." });
       }
       setEditDialogOpen(false);
       setEditingItem(null);
-      loadAllEquipment();
     } catch (error) {
       toast({ title: "Error", description: "Failed to update equipment.", variant: "destructive" });
     } finally {
@@ -242,16 +272,22 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!satEditData) return;
     setIsSavingSatellite(true);
     try {
-      // Save to mapping override instead of global satellite
       if (selectedBuildId) {
+        // Store as mapping override - doesn't affect global satellite
         apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
+        
+        // Update local state immediately
+        setAllSatellites(prev => prev.map(s => 
+          s.id === satEditData.id ? { ...s, ...satEditData, id: s.id } : s
+        ));
+        
         toast({ title: "Updated", description: "Satellite override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateSatellite(satEditData.id, satEditData);
+        await loadAllEquipment();
         toast({ title: "Updated", description: "Satellite updated globally." });
       }
       setIsSatelliteDialogOpen(false);
-      loadAllEquipment();
     } catch {
       toast({ title: "Error", description: "Failed to update satellite.", variant: "destructive" });
     } finally {
@@ -529,18 +565,17 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     );
   };
 
-  // Render edit form content in dialog
+  // Render edit form content in dialog - uses global type definitions
   const renderEditContent = () => {
     if (!editingItem || !editingType) return null;
     if (editingType === 'lnbs') {
-      const bandTypes = ["NONE", "C-Band", "Ku-Band", "Ka-Band", "L-Band", ...apiService.getCustomTypes('lnb_band')];
       return (
         <div className="space-y-3">
           <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
           <InlineFormField label="Band Type">
-            <Select value={editFormData.bandType || "none"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v === "none" ? "" : v})}>
+            <Select value={editFormData.bandType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v})}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>{bandTypes.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+              <SelectContent>{lnbBandTypes.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
@@ -548,19 +583,19 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
           <InlineFormField label="Power Control">
             <Select value={editFormData.powerControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, powerControl: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{["NONE","Auto","13V","18V","Off"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent>{LNB_POWER_CONTROLS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <InlineFormField label="V-Control">
             <Select value={editFormData.vControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, vControl: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{["NONE","Enabled","Disabled"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent>{LNB_V_CONTROLS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <InlineFormField label="22KHz">
             <Select value={editFormData.khzOption || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, khzOption: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{["NONE","Auto","On","Off"].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+              <SelectContent>{LNB_KHZ_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
         </div>
@@ -570,9 +605,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
-           <Select value={editFormData.switchType || "none"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v === "none" ? "" : v})}>
+           <Select value={editFormData.switchType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem>{["Tone Burst","DiSEqC 1.0","DiSEqC 1.1", ...apiService.getCustomTypes('switch_type')].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              <SelectContent>{switchTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <div>
@@ -592,9 +627,9 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
-            <Select value={editFormData.motorType || "none"} onValueChange={(v) => setEditFormData({...editFormData, motorType: v === "none" ? "" : v})}>
+            <Select value={editFormData.motorType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, motorType: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem><SelectItem value="DiSEqC 1.2">DiSEqC 1.2</SelectItem></SelectContent>
+              <SelectContent>{motorTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           {editFormData.motorType === "DiSEqC 1.0" && (
@@ -605,15 +640,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <InlineFormField label="Longitude"><Input value={editFormData.longitude || ""} onChange={(e) => setEditFormData({...editFormData, longitude: e.target.value})} /></InlineFormField>
               <InlineFormField label="Latitude"><Input value={editFormData.latitude || ""} onChange={(e) => setEditFormData({...editFormData, latitude: e.target.value})} /></InlineFormField>
               <InlineFormField label="E/W">
-                <Select value={editFormData.eastWest || "none"} onValueChange={(v) => setEditFormData({...editFormData, eastWest: v === "none" ? "" : v})}>
+                <Select value={editFormData.eastWest || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, eastWest: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="NONE">Select</SelectItem>{MOTOR_EAST_WEST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
               </InlineFormField>
               <InlineFormField label="N/S">
-                <Select value={editFormData.northSouth || "none"} onValueChange={(v) => setEditFormData({...editFormData, northSouth: v === "none" ? "" : v})}>
+                <Select value={editFormData.northSouth || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, northSouth: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="North">North</SelectItem><SelectItem value="South">South</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="NONE">Select</SelectItem>{MOTOR_NORTH_SOUTH.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
               </InlineFormField>
             </>
@@ -626,22 +661,22 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       return (
         <div className="space-y-3">
           <InlineFormField label="Type">
-            <Select value={editFormData.unicableType || "none"} onValueChange={(v) => setEditFormData({...editFormData, unicableType: v === "none" ? "" : v})}>
+            <Select value={editFormData.unicableType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, unicableType: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="DSCR">DSCR</SelectItem><SelectItem value="DCSS">DCSS</SelectItem></SelectContent>
+              <SelectContent>{unicableTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <InlineFormField label="Status">
             <Select value={editFormData.status || "OFF"} onValueChange={(v) => setEditFormData({...editFormData, status: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="ON">ON</SelectItem><SelectItem value="OFF">OFF</SelectItem></SelectContent>
+              <SelectContent>{UNICABLE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           {editFormData.unicableType === "DSCR" && (
             <InlineFormField label="Port">
               <Select value={editFormData.port || "None"} onValueChange={(v) => setEditFormData({...editFormData, port: v})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="None">None</SelectItem><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem></SelectContent>
+                <SelectContent>{UNICABLE_PORT_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
               </Select>
             </InlineFormField>
           )}
@@ -686,17 +721,13 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             </div>
             Project Mapping
           </h2>
-          <p className="text-muted-foreground mt-1">Select project and build, then map equipment from the global bucket</p>
+          <p className="text-muted-foreground mt-1">Map and configure equipment for project builds</p>
         </div>
       </div>
 
-      {/* Selection Flow */}
+      {/* Project/Build Selection */}
       <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg"><Settings className="h-5 w-5" />Selection</CardTitle>
-          <CardDescription>Choose a project and build to view and manage equipment mappings</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex-1 min-w-[200px]">
               <InlineFormField label="Project">
@@ -755,7 +786,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 <span className="ml-2 text-muted-foreground">Loading equipment...</span>
               </div>
             ) : (
-              <Tabs defaultValue="lnbs" className="w-full">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-5 mb-4">
                   <TabsTrigger value="lnbs" className="flex items-center gap-1"><Radio className="h-4 w-4" /><span className="hidden sm:inline">LNBs</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('lnbs')}/{allLnbs.length}</Badge></TabsTrigger>
                   <TabsTrigger value="switches" className="flex items-center gap-1"><Zap className="h-4 w-4" /><span className="hidden sm:inline">Switches</span><Badge variant="outline" className="ml-1 text-xs">{getMappingCount('switches')}/{allSwitches.length}</Badge></TabsTrigger>
@@ -821,7 +852,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <Edit className="h-5 w-5 text-primary" />
-              Edit Equipment
+              Edit Equipment {selectedBuildId && <Badge variant="secondary" className="text-xs">Build Override</Badge>}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">{renderEditContent()}</div>
@@ -842,6 +873,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
             <DialogTitle className="flex items-center gap-2">
               <Satellite className="h-5 w-5 text-primary" />
               Edit Satellite - {satEditData?.name || ''}
+              {selectedBuildId && <Badge variant="secondary" className="text-xs">Build Override</Badge>}
             </DialogTitle>
           </DialogHeader>
           {satEditData && (
@@ -856,7 +888,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                     <InlineFormField label="Direction">
                       <Select value={satEditData.direction || "none"} onValueChange={(v) => setSatEditData({...satEditData, direction: v === "none" ? "" : v})}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+                        <SelectContent><SelectItem value="none">Select</SelectItem>{SATELLITE_DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                       </Select>
                     </InlineFormField>
                     <InlineFormField label="Status">
@@ -939,14 +971,14 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                                 <InlineFormField label="Polarization">
                                   <Select value={carrier.polarization || "none"} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'polarization', v === "none" ? "" : v)}>
                                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Horizontal">Horizontal</SelectItem><SelectItem value="Vertical">Vertical</SelectItem><SelectItem value="Left">Left</SelectItem><SelectItem value="Right">Right</SelectItem></SelectContent>
+                                    <SelectContent><SelectItem value="none">Select</SelectItem>{POLARIZATIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </InlineFormField>
                                 <InlineFormField label="Symbol Rate"><Input value={carrier.symbolRate || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'symbolRate', e.target.value)} /></InlineFormField>
                                 <InlineFormField label="FEC">
                                   <Select value={carrier.fec || "none"} onValueChange={(v) => updateCarrierInSatEdit(cIdx, 'fec', v === "none" ? "" : v)}>
                                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent><SelectItem value="none">Select</SelectItem><SelectItem value="Auto">Auto</SelectItem><SelectItem value="1/2">1/2</SelectItem><SelectItem value="2/3">2/3</SelectItem><SelectItem value="3/4">3/4</SelectItem><SelectItem value="5/6">5/6</SelectItem><SelectItem value="7/8">7/8</SelectItem></SelectContent>
+                                    <SelectContent><SelectItem value="none">Select</SelectItem>{FEC_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </InlineFormField>
                               </div>
@@ -1026,7 +1058,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                 <Card><CardContent className="p-4 text-center"><Satellite className="h-6 w-6 mx-auto text-primary mb-1" /><p className="text-2xl font-bold">{getMappedEquipment().satellites.length}</p><p className="text-xs text-muted-foreground">Satellites</p></CardContent></Card>
               </div>
               {getMappedEquipment().lnbs.length > 0 && (
-                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Radio className="h-4 w-4" />LNBs</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Band</TableHead><TableHead>Low Freq</TableHead><TableHead>High Freq</TableHead><TableHead>LO1(H)</TableHead><TableHead>LO1(L)</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().lnbs.map(l => <TableRow key={l.id}><TableCell>{l.name}</TableCell><TableCell>{l.bandType || '-'}</TableCell><TableCell>{l.lowFrequency || '-'}</TableCell><TableCell>{l.highFrequency || '-'}</TableCell><TableCell>{l.lo1High || '-'}</TableCell><TableCell>{l.lo1Low || '-'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+                <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Radio className="h-4 w-4" />LNBs</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Band</TableHead><TableHead>Low Freq</TableHead><TableHead>High Freq</TableHead><TableHead>Power</TableHead><TableHead>22KHz</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().lnbs.map(l => <TableRow key={l.id}><TableCell>{l.name}</TableCell><TableCell>{l.bandType || '-'}</TableCell><TableCell>{l.lowFrequency || '-'}</TableCell><TableCell>{l.highFrequency || '-'}</TableCell><TableCell>{l.powerControl || '-'}</TableCell><TableCell>{l.khzOption || '-'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
               )}
               {getMappedEquipment().switches.length > 0 && (
                 <Card><CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4" />Switches</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Options</TableHead></TableRow></TableHeader><TableBody>{getMappedEquipment().switches.map(s => <TableRow key={s.id}><TableCell>{s.switchType || '-'}</TableCell><TableCell>{(Array.isArray(s.switchOptions) ? s.switchOptions : []).join(', ') || '-'}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>

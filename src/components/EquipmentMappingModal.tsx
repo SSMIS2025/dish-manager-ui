@@ -14,6 +14,11 @@ import { Radio, Zap, RotateCcw, Loader2, Plus, Trash2, Save, Search, Edit, Eye }
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/apiService";
 import InlineFormField from "./InlineFormField";
+import {
+  DEFAULT_LNB_BANDS, LNB_POWER_CONTROLS, LNB_V_CONTROLS, LNB_KHZ_OPTIONS,
+  DEFAULT_SWITCH_TYPES, DEFAULT_MOTOR_TYPES, MOTOR_EAST_WEST, MOTOR_NORTH_SOUTH,
+  getMergedTypes
+} from "@/config/equipmentTypes";
 
 interface EquipmentMappingModalProps {
   open: boolean;
@@ -46,7 +51,7 @@ const EquipmentMappingModal = ({
   
   const [selectedLnbId, setSelectedLnbId] = useState<string>("");
   const [selectedSwitchIds, setSelectedSwitchIds] = useState<string[]>([]);
-  const [selectedSwitchOption, setSelectedSwitchOption] = useState<string>(""); // single option per switch
+  const [selectedSwitchOption, setSelectedSwitchOption] = useState<string>("");
   const [selectedMotorId, setSelectedMotorId] = useState<string>("");
   
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -54,15 +59,20 @@ const EquipmentMappingModal = ({
   const [editFormData, setEditFormData] = useState<any>({});
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Use global type definitions
+  const lnbBandTypes = getMergedTypes(DEFAULT_LNB_BANDS, apiService.getCustomTypes('lnb_band'));
+  const switchTypes = getMergedTypes(DEFAULT_SWITCH_TYPES, apiService.getCustomTypes('switch_type'));
+  const motorTypes = getMergedTypes(DEFAULT_MOTOR_TYPES, apiService.getCustomTypes('motor_type'));
+
   useEffect(() => {
     if (satellite) {
-      setSelectedLnbId(satellite.mappedLnb || (allLnbs.length > 0 ? allLnbs[0].id : ""));
+      setSelectedLnbId(satellite.mappedLnb || "");
       const switchId = satellite.mappedSwitch || "";
       setSelectedSwitchIds(switchId ? switchId.split(',').filter(Boolean) : []);
       setSelectedSwitchOption(satellite.mappedSwitchOption || "");
       setSelectedMotorId(satellite.mappedMotor || "");
     }
-  }, [satellite, allLnbs]);
+  }, [satellite]);
 
   const filteredLnbs = allLnbs.filter(l => 
     l.name?.toLowerCase().includes(lnbSearch.toLowerCase()) ||
@@ -80,8 +90,6 @@ const EquipmentMappingModal = ({
     m.motorType?.toLowerCase().includes(motorSearch.toLowerCase())
   );
 
-  // Switch selection: Tone Burst always allowed + one DiSEqC. 
-  // After selecting a switch, user picks ONE option from that switch's options.
   const handleSwitchToggle = (switchId: string) => {
     const switchItem = allSwitches.find(s => s.id === switchId);
     if (!switchItem) return;
@@ -93,7 +101,6 @@ const EquipmentMappingModal = ({
       if (isToneBurst) {
         setSelectedSwitchIds(prev => [...prev, switchId]);
       } else {
-        // Remove existing DiSEqC, keep Tone Burst
         const newIds = selectedSwitchIds.filter(id => {
           const s = allSwitches.find(sw => sw.id === id);
           return s?.switchType === "Tone Burst";
@@ -143,51 +150,30 @@ const EquipmentMappingModal = ({
   const renderLnbDetails = () => (
     <div className="space-y-2 text-sm">
       <InlineFormField label="Name"><Input value={editFormData.name || ""} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} /></InlineFormField>
-      <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
-      <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
-      <InlineFormField label="LO1(H)"><Input value={editFormData.lo1High || ""} onChange={(e) => setEditFormData({...editFormData, lo1High: e.target.value})} /></InlineFormField>
-      <InlineFormField label="LO1(L)"><Input value={editFormData.lo1Low || ""} onChange={(e) => setEditFormData({...editFormData, lo1Low: e.target.value})} /></InlineFormField>
       <InlineFormField label="Band Type">
         <Select value={editFormData.bandType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, bandType: v})}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NONE">NONE</SelectItem>
-            <SelectItem value="C-Band">C-Band</SelectItem>
-            <SelectItem value="Ku-Band">Ku-Band</SelectItem>
-            <SelectItem value="Ka-Band">Ka-Band</SelectItem>
-          </SelectContent>
+          <SelectContent>{lnbBandTypes.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
         </Select>
       </InlineFormField>
+      <InlineFormField label="Low Freq"><Input value={editFormData.lowFrequency || ""} onChange={(e) => setEditFormData({...editFormData, lowFrequency: e.target.value})} /></InlineFormField>
+      <InlineFormField label="High Freq"><Input value={editFormData.highFrequency || ""} onChange={(e) => setEditFormData({...editFormData, highFrequency: e.target.value})} /></InlineFormField>
       <InlineFormField label="Power Control">
         <Select value={editFormData.powerControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, powerControl: v})}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NONE">NONE</SelectItem>
-            <SelectItem value="13V">13V</SelectItem>
-            <SelectItem value="18V">18V</SelectItem>
-            <SelectItem value="Auto">Auto</SelectItem>
-          </SelectContent>
+          <SelectContent>{LNB_POWER_CONTROLS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
         </Select>
       </InlineFormField>
       <InlineFormField label="V-Control">
         <Select value={editFormData.vControl || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, vControl: v})}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NONE">NONE</SelectItem>
-            <SelectItem value="ON">ON</SelectItem>
-            <SelectItem value="OFF">OFF</SelectItem>
-          </SelectContent>
+          <SelectContent>{LNB_V_CONTROLS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
         </Select>
       </InlineFormField>
       <InlineFormField label="22KHz">
         <Select value={editFormData.khzOption || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, khzOption: v})}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NONE">NONE</SelectItem>
-            <SelectItem value="ON">ON</SelectItem>
-            <SelectItem value="OFF">OFF</SelectItem>
-            <SelectItem value="Auto">Auto</SelectItem>
-          </SelectContent>
+          <SelectContent>{LNB_KHZ_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
         </Select>
       </InlineFormField>
     </div>
@@ -200,12 +186,7 @@ const EquipmentMappingModal = ({
         <InlineFormField label="Type">
           <Select value={editFormData.switchType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, switchType: v})}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="NONE">NONE</SelectItem>
-              <SelectItem value="Tone Burst">Tone Burst</SelectItem>
-              <SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem>
-              <SelectItem value="DiSEqC 1.1">DiSEqC 1.1</SelectItem>
-            </SelectContent>
+            <SelectContent>{switchTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
           </Select>
         </InlineFormField>
         <div>
@@ -227,11 +208,7 @@ const EquipmentMappingModal = ({
       <InlineFormField label="Type">
         <Select value={editFormData.motorType || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, motorType: v})}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NONE">NONE</SelectItem>
-            <SelectItem value="DiSEqC 1.0">DiSEqC 1.0</SelectItem>
-            <SelectItem value="DiSEqC 1.2">DiSEqC 1.2</SelectItem>
-          </SelectContent>
+          <SelectContent>{motorTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
         </Select>
       </InlineFormField>
       {editFormData.motorType === "DiSEqC 1.0" && (
@@ -244,13 +221,13 @@ const EquipmentMappingModal = ({
           <InlineFormField label="East/West">
             <Select value={editFormData.eastWest || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, eastWest: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="NONE">NONE</SelectItem><SelectItem value="East">East</SelectItem><SelectItem value="West">West</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="NONE">NONE</SelectItem>{MOTOR_EAST_WEST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
           <InlineFormField label="North/South">
             <Select value={editFormData.northSouth || "NONE"} onValueChange={(v) => setEditFormData({...editFormData, northSouth: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="NONE">NONE</SelectItem><SelectItem value="North">North</SelectItem><SelectItem value="South">South</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="NONE">NONE</SelectItem>{MOTOR_NORTH_SOUTH.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
             </Select>
           </InlineFormField>
         </>
@@ -284,13 +261,13 @@ const EquipmentMappingModal = ({
               {isEditing ? <Eye className="h-3 w-3" /> : <Edit className="h-3 w-3" />}
             </Button>
           </div>
-          {/* For switches: show option selector when selected */}
           {isSelected && type === 'switches' && switchOptions.length > 0 && (
             <div className="mt-2 pl-8">
               <Label className="text-xs text-muted-foreground mb-1 block">Choose one option for satellite:</Label>
-              <Select value={selectedSwitchOption} onValueChange={setSelectedSwitchOption}>
+              <Select value={selectedSwitchOption || "none"} onValueChange={(v) => setSelectedSwitchOption(v === "none" ? "" : v)}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select option" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
                   {switchOptions.map((opt: string, idx: number) => (
                     <SelectItem key={idx} value={opt || `option-${idx}`}>{opt || `Option ${idx + 1}`}</SelectItem>
                   ))}
@@ -351,11 +328,9 @@ const EquipmentMappingModal = ({
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search LNBs..." value={lnbSearch} onChange={(e) => setLnbSearch(e.target.value)} className="pl-9" />
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">Select one LNB. If none selected, first available LNB will be used.</p>
                 <ScrollArea className="h-[calc(100%-80px)]">
                   <div className="space-y-2 pr-3">
-                    {filteredLnbs.map(lnb => renderItemCard(lnb, 'lnbs', selectedLnbId === lnb.id, () => setSelectedLnbId(lnb.id), <Radio className="h-4 w-4 text-primary" />))}
-                    {filteredLnbs.length === 0 && <p className="text-center py-8 text-muted-foreground">No LNBs found</p>}
+                    {filteredLnbs.map(lnb => renderItemCard(lnb, 'lnbs', selectedLnbId === lnb.id, () => setSelectedLnbId(prev => prev === lnb.id ? "" : lnb.id), <Radio className="h-4 w-4 text-primary shrink-0" />))}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -365,11 +340,10 @@ const EquipmentMappingModal = ({
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search Switches..." value={switchSearch} onChange={(e) => setSwitchSearch(e.target.value)} className="pl-9" />
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">Tone Burst can combine with one DiSEqC. After selecting, choose one option for the satellite.</p>
-                <ScrollArea className="h-[calc(100%-80px)]">
+                <p className="text-xs text-muted-foreground mb-2">Tone Burst always allowed. Only one DiSEqC switch at a time.</p>
+                <ScrollArea className="h-[calc(100%-100px)]">
                   <div className="space-y-2 pr-3">
-                    {filteredSwitches.map(sw => renderItemCard(sw, 'switches', selectedSwitchIds.includes(sw.id), () => handleSwitchToggle(sw.id), <Zap className="h-4 w-4 text-primary" />))}
-                    {filteredSwitches.length === 0 && <p className="text-center py-8 text-muted-foreground">No switches found</p>}
+                    {filteredSwitches.map(sw => renderItemCard(sw, 'switches', selectedSwitchIds.includes(sw.id), () => handleSwitchToggle(sw.id), <Zap className="h-4 w-4 text-primary shrink-0" />))}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -379,42 +353,37 @@ const EquipmentMappingModal = ({
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search Motors..." value={motorSearch} onChange={(e) => setMotorSearch(e.target.value)} className="pl-9" />
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">Select one motor. Optional.</p>
-                <ScrollArea className="h-[calc(100%-80px)]">
+                <ScrollArea className="h-[calc(100%-60px)]">
                   <div className="space-y-2 pr-3">
-                    <Card className={`cursor-pointer transition-all ${!selectedMotorId ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'}`} onClick={() => setSelectedMotorId("")}>
-                      <CardHeader className="py-3 px-4"><div className="flex items-center gap-2"><Checkbox checked={!selectedMotorId} className="pointer-events-none" /><CardTitle className="text-sm">None</CardTitle></div></CardHeader>
-                    </Card>
-                    {filteredMotors.map(motor => renderItemCard(motor, 'motors', selectedMotorId === motor.id, () => setSelectedMotorId(motor.id), <RotateCcw className="h-4 w-4 text-primary" />))}
+                    {filteredMotors.map(motor => renderItemCard(motor, 'motors', selectedMotorId === motor.id, () => setSelectedMotorId(prev => prev === motor.id ? "" : motor.id), <RotateCcw className="h-4 w-4 text-primary shrink-0" />))}
                   </div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
           </div>
 
-          {/* Right side: Summary */}
-          <div className="w-72 border-l pl-4">
-            <h3 className="font-medium mb-3">Selected Equipment</h3>
-            <div className="space-y-3">
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2 text-sm font-medium mb-1"><Radio className="h-4 w-4 text-primary" /><span>LNB</span></div>
-                <p className="text-sm text-muted-foreground">{selectedLnbId ? allLnbs.find(l => l.id === selectedLnbId)?.name : "Default (First available)"}</p>
+          {/* Summary */}
+          <div className="w-64 border-l pl-4 flex flex-col">
+            <h3 className="text-sm font-semibold mb-3">Selected Equipment</h3>
+            <div className="space-y-4 flex-1">
+              <div>
+                <Label className="text-xs text-muted-foreground">LNB</Label>
+                <p className="text-sm font-medium">{selectedLnbId ? allLnbs.find(l => l.id === selectedLnbId)?.name || '-' : 'None'}</p>
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2 text-sm font-medium mb-1"><Zap className="h-4 w-4 text-primary" /><span>Switch</span></div>
-                {selectedSwitchIds.length > 0 ? (
-                  <div className="space-y-1">
-                    {selectedSwitchIds.map(id => {
-                      const sw = allSwitches.find(s => s.id === id);
-                      return <Badge key={id} variant="secondary" className="text-xs mr-1">{sw?.switchType}</Badge>;
-                    })}
-                    {selectedSwitchOption && <p className="text-xs text-muted-foreground mt-1">Option: {selectedSwitchOption}</p>}
-                  </div>
-                ) : <p className="text-sm text-muted-foreground">None</p>}
+              <Separator />
+              <div>
+                <Label className="text-xs text-muted-foreground">Switches ({selectedSwitchIds.length})</Label>
+                {selectedSwitchIds.length === 0 ? <p className="text-sm">None</p> : (
+                  selectedSwitchIds.map(id => {
+                    const sw = allSwitches.find(s => s.id === id);
+                    return <p key={id} className="text-sm font-medium">{sw?.switchType || '-'}</p>;
+                  })
+                )}
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2 text-sm font-medium mb-1"><RotateCcw className="h-4 w-4 text-primary" /><span>Motor</span></div>
-                <p className="text-sm text-muted-foreground">{selectedMotorId ? allMotors.find(m => m.id === selectedMotorId)?.motorType : "None"}</p>
+              <Separator />
+              <div>
+                <Label className="text-xs text-muted-foreground">Motor</Label>
+                <p className="text-sm font-medium">{selectedMotorId ? allMotors.find(m => m.id === selectedMotorId)?.motorType || '-' : 'None'}</p>
               </div>
             </div>
           </div>
@@ -423,7 +392,8 @@ const EquipmentMappingModal = ({
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save Mappings"}
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Save Mappings
           </Button>
         </div>
       </DialogContent>
