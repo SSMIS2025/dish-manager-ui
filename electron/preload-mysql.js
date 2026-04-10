@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('electron', {
     deleteBuildMapping: (buildId, equipmentType, equipmentId) => 
       ipcRenderer.invoke('db:deleteBuildMapping', buildId, equipmentType, equipmentId),
 
+    // Build Mapping Overrides
+    getBuildMappingOverrides: (buildId) => ipcRenderer.invoke('db:getBuildMappingOverrides', buildId),
+    setBuildMappingOverride: (buildId, equipmentType, equipmentId, data) =>
+      ipcRenderer.invoke('db:setBuildMappingOverride', buildId, equipmentType, equipmentId, data),
+    deleteBuildMappingOverride: (buildId, equipmentType, equipmentId) =>
+      ipcRenderer.invoke('db:deleteBuildMappingOverride', buildId, equipmentType, equipmentId),
+
     // Activities
     getActivities: () => ipcRenderer.invoke('db:getActivities'),
     createActivity: (data) => ipcRenderer.invoke('db:createActivity', data),

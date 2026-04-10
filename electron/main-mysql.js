@@ -94,10 +94,25 @@ function initializeHandlers() {
   ipcMain.handle('db:createBuildMapping', (_, data) => dbHandler.createBuildMapping(data));
   ipcMain.handle('db:deleteBuildMapping', (_, buildId, equipmentType, equipmentId) => 
     dbHandler.deleteBuildMapping(buildId, equipmentType, equipmentId));
+  ipcMain.handle('db:getBuildMappingOverrides', (_, buildId) => dbHandler.getBuildMappingOverrides(buildId));
+  ipcMain.handle('db:setBuildMappingOverride', (_, buildId, equipmentType, equipmentId, data) =>
+    dbHandler.setBuildMappingOverride(buildId, equipmentType, equipmentId, data));
+  ipcMain.handle('db:deleteBuildMappingOverride', (_, buildId, equipmentType, equipmentId) =>
+    dbHandler.deleteBuildMappingOverride(buildId, equipmentType, equipmentId));
 
   // Activities
   ipcMain.handle('db:getActivities', () => dbHandler.getActivities());
   ipcMain.handle('db:createActivity', (_, data) => dbHandler.createActivity(data));
+
+  // Custom Types
+  ipcMain.handle('db:getCustomTypes', (_, category) => dbHandler.getCustomTypes(category));
+  ipcMain.handle('db:addCustomType', (_, category, value) => dbHandler.addCustomType(category, value));
+  ipcMain.handle('db:deleteCustomType', (_, category, value) => dbHandler.deleteCustomType(category, value));
+
+  // User Favorites
+  ipcMain.handle('db:getUserFavorites', (_, username) => dbHandler.getUserFavorites(username));
+  ipcMain.handle('db:addUserFavorite', (_, username, projectId) => dbHandler.addUserFavorite(username, projectId));
+  ipcMain.handle('db:removeUserFavorite', (_, username, projectId) => dbHandler.removeUserFavorite(username, projectId));
 
   // =====================
   // Auth IPC handlers

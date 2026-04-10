@@ -44,9 +44,26 @@ contextBridge.exposeInMainWorld('electron', {
     deleteBuildMapping: (buildId, equipmentType, equipmentId) => 
       ipcRenderer.invoke('db:deleteBuildMapping', buildId, equipmentType, equipmentId),
 
+    // Build Mapping Overrides
+    getBuildMappingOverrides: (buildId) => ipcRenderer.invoke('db:getBuildMappingOverrides', buildId),
+    setBuildMappingOverride: (buildId, equipmentType, equipmentId, data) =>
+      ipcRenderer.invoke('db:setBuildMappingOverride', buildId, equipmentType, equipmentId, data),
+    deleteBuildMappingOverride: (buildId, equipmentType, equipmentId) =>
+      ipcRenderer.invoke('db:deleteBuildMappingOverride', buildId, equipmentType, equipmentId),
+
     // Activities
     getActivities: () => ipcRenderer.invoke('db:getActivities'),
     createActivity: (data) => ipcRenderer.invoke('db:createActivity', data),
+
+    // Custom Types
+    getCustomTypes: (category) => ipcRenderer.invoke('db:getCustomTypes', category),
+    addCustomType: (category, value) => ipcRenderer.invoke('db:addCustomType', category, value),
+    deleteCustomType: (category, value) => ipcRenderer.invoke('db:deleteCustomType', category, value),
+
+    // User Favorites
+    getUserFavorites: (username) => ipcRenderer.invoke('db:getUserFavorites', username),
+    addUserFavorite: (username, projectId) => ipcRenderer.invoke('db:addUserFavorite', username, projectId),
+    removeUserFavorite: (username, projectId) => ipcRenderer.invoke('db:removeUserFavorite', username, projectId),
   },
 
   // Authentication

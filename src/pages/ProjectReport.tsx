@@ -47,9 +47,19 @@ const ProjectReport = () => {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (selectedBuildId) {
-      loadBuildMappings(selectedBuildId);
-    }
+    const loadBuildContext = async () => {
+      if (selectedBuildId) {
+        await Promise.all([
+          loadBuildMappings(selectedBuildId),
+          loadEquipment(selectedBuildId)
+        ]);
+      } else {
+        setBuildMappings([]);
+        await loadEquipment();
+      }
+    };
+
+    loadBuildContext();
   }, [selectedBuildId]);
 
   const loadProjects = async () => {
@@ -87,15 +97,15 @@ const ProjectReport = () => {
     }
   };
 
-  const loadEquipment = async () => {
+  const loadEquipment = async (buildId?: string) => {
     setIsLoading(true);
     try {
       const [lnbs, switches, motors, unicables, satellites] = await Promise.all([
-        apiService.getEquipment('lnbs'),
-        apiService.getEquipment('switches'),
-        apiService.getEquipment('motors'),
-        apiService.getEquipment('unicables'),
-        apiService.getSatellites()
+        apiService.getEquipmentWithOverrides('lnbs', buildId || ''),
+        apiService.getEquipmentWithOverrides('switches', buildId || ''),
+        apiService.getEquipmentWithOverrides('motors', buildId || ''),
+        apiService.getEquipmentWithOverrides('unicables', buildId || ''),
+        apiService.getEquipmentWithOverrides('satellites', buildId || '')
       ]);
       setAllLnbs(lnbs || []);
       setAllSwitches(switches || []);

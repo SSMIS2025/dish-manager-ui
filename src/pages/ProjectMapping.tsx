@@ -103,7 +103,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
   useEffect(() => {
     loadProjects();
-    loadAllEquipment();
   }, []);
 
   useEffect(() => {
@@ -115,9 +114,19 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (selectedBuildId) {
-      loadBuildMappings(selectedBuildId);
-    }
+    const loadBuildContext = async () => {
+      if (selectedBuildId) {
+        await Promise.all([
+          loadBuildMappings(selectedBuildId),
+          loadAllEquipment(selectedBuildId)
+        ]);
+      } else {
+        setBuildMappings([]);
+        await loadAllEquipment();
+      }
+    };
+
+    loadBuildContext();
   }, [selectedBuildId]);
 
   const loadProjects = async () => {
@@ -144,15 +153,15 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     }
   };
 
-  const loadAllEquipment = async () => {
+  const loadAllEquipment = async (buildId?: string) => {
     setIsLoadingEquipment(true);
     try {
       const [lnbs, switches, motors, unicables, satellites] = await Promise.all([
-        apiService.getEquipment('lnbs'),
-        apiService.getEquipment('switches'),
-        apiService.getEquipment('motors'),
-        apiService.getEquipment('unicables'),
-        apiService.getSatellites()
+        apiService.getEquipmentWithOverrides('lnbs', buildId || ''),
+        apiService.getEquipmentWithOverrides('switches', buildId || ''),
+        apiService.getEquipmentWithOverrides('motors', buildId || ''),
+        apiService.getEquipmentWithOverrides('unicables', buildId || ''),
+        apiService.getEquipmentWithOverrides('satellites', buildId || '')
       ]);
       setAllLnbs(lnbs || []);
       setAllSwitches(switches || []);
@@ -226,21 +235,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
       // Save as mapping override - stored separately, doesn't affect global
       if (selectedBuildId) {
         const overrideData = { ...editFormData };
-        // Store override via apiService (handles localStorage + electron IPC)
-        apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, overrideData);
-        
-        // Update local state immediately so UI reflects the edit
-        const updateLocalState = (setter: React.Dispatch<React.SetStateAction<any[]>>) => {
-          setter(prev => prev.map(item => 
-            item.id === editingItem.id ? { ...item, ...overrideData, id: item.id } : item
-          ));
-        };
-        
-        if (editingType === 'lnbs') updateLocalState(setAllLnbs);
-        else if (editingType === 'switches') updateLocalState(setAllSwitches);
-        else if (editingType === 'motors') updateLocalState(setAllMotors);
-        else if (editingType === 'unicables') updateLocalState(setAllUnicables);
-        
+        await apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, overrideData);
+        await loadAllEquipment(selectedBuildId);
         toast({ title: "Updated", description: "Equipment override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateEquipment(editingType, editingItem.id, editFormData);
@@ -274,13 +270,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     try {
       if (selectedBuildId) {
         // Store as mapping override - doesn't affect global satellite
-        apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
-        
-        // Update local state immediately
-        setAllSatellites(prev => prev.map(s => 
-          s.id === satEditData.id ? { ...s, ...satEditData, id: s.id } : s
-        ));
-        
+        await apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
+        await loadAllEquipment(selectedBuildId);
         toast({ title: "Updated", description: "Satellite override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateSatellite(satEditData.id, satEditData);
