@@ -184,6 +184,20 @@ CREATE TABLE IF NOT EXISTS build_mappings (
     KEY idx_build_id (build_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+-- Build Mapping Overrides table (project/build-specific edits without affecting global equipment)
+CREATE TABLE IF NOT EXISTS build_mapping_overrides (
+    id VARCHAR(50) NOT NULL,
+    build_id VARCHAR(50) NOT NULL,
+    equipment_type VARCHAR(50) NOT NULL,
+    equipment_id VARCHAR(50) NOT NULL,
+    override_data LONGTEXT,
+    created_at DATETIME DEFAULT NULL,
+    updated_at DATETIME DEFAULT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_build_override (build_id, equipment_type, equipment_id),
+    KEY idx_build_override_build (build_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 -- Custom types table (admin-managed LNB bands, switch types, etc.)
 CREATE TABLE IF NOT EXISTS custom_types (
     id VARCHAR(50) NOT NULL,

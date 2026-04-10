@@ -14,6 +14,7 @@ class MySQLDatabaseHandler {
   constructor(config) {
     this.config = config || this.loadConfig();
     this.pool = null;
+    this.schemaPromise = null;
   }
 
   loadConfig() {
@@ -59,7 +60,83 @@ class MySQLDatabaseHandler {
         connectTimeout: 10000
       });
     }
+
+    await this.ensureSchema();
     return this.pool;
+  }
+
+  async ensureSchema() {
+    if (this.schemaPromise) return this.schemaPromise;
+
+    this.schemaPromise = this._ensureSchema().catch((error) => {
+      this.schemaPromise = null;
+      throw error;
+    });
+
+    return this.schemaPromise;
+  }
+
+  async _ensureSchema() {
+    if (!this.pool) return;
+
+    const run = async (sql, params = []) => {
+      await this.pool.query(sql, params);
+    };
+
+    const ensureColumn = async (tableName, columnName, definition) => {
+      try {
+        const [rows] = await this.pool.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [columnName]);
+        if (!Array.isArray(rows) || rows.length === 0) {
+          await run(`ALTER TABLE \`${tableName}\` ADD COLUMN ${definition}`);
+        }
+      } catch (error) {
+        console.error(`Schema check failed for ${tableName}.${columnName}:`, error);
+      }
+    };
+
+    await ensureColumn('lnbs', 'custom_fields', '`custom_fields` TEXT DEFAULT NULL');
+    await ensureColumn('switches', 'switch_options', '`switch_options` TEXT DEFAULT NULL');
+    await ensureColumn('unicables', 'if_slots', '`if_slots` TEXT DEFAULT NULL');
+    await ensureColumn('satellites', 'mapped_lnb', '`mapped_lnb` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('satellites', 'mapped_switch', '`mapped_switch` TEXT DEFAULT NULL');
+    await ensureColumn('satellites', 'mapped_motor', '`mapped_motor` VARCHAR(50) DEFAULT NULL');
+
+    await run(`
+      CREATE TABLE IF NOT EXISTS custom_types (
+        id VARCHAR(50) NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        value VARCHAR(255) NOT NULL,
+        created_at DATETIME DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_custom_type (category, value)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+    `);
+
+    await run(`
+      CREATE TABLE IF NOT EXISTS user_favorites (
+        id VARCHAR(50) NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        project_id VARCHAR(50) NOT NULL,
+        created_at DATETIME DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_favorite (username, project_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+    `);
+
+    await run(`
+      CREATE TABLE IF NOT EXISTS build_mapping_overrides (
+        id VARCHAR(50) NOT NULL,
+        build_id VARCHAR(50) NOT NULL,
+        equipment_type VARCHAR(50) NOT NULL,
+        equipment_id VARCHAR(50) NOT NULL,
+        override_data LONGTEXT,
+        created_at DATETIME DEFAULT NULL,
+        updated_at DATETIME DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_build_override (build_id, equipment_type, equipment_id),
+        KEY idx_build_override_build (build_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+    `);
   }
 
   async query(sql, params = []) {
@@ -126,6 +203,7 @@ class MySQLDatabaseHandler {
       const builds = await this.query('SELECT id FROM project_builds WHERE project_id = ?', [id]);
       for (const build of builds) {
         await this.query('DELETE FROM build_mappings WHERE build_id = ?', [build.id]);
+        await this.query('DELETE FROM build_mapping_overrides WHERE build_id = ?', [build.id]);
       }
       await this.query('DELETE FROM project_builds WHERE project_id = ?', [id]);
       await this.query('DELETE FROM project_mappings WHERE project_id = ?', [id]);
@@ -207,6 +285,7 @@ class MySQLDatabaseHandler {
   async deleteProjectBuild(id) {
     try {
       await this.query('DELETE FROM build_mappings WHERE build_id = ?', [id]);
+      await this.query('DELETE FROM build_mapping_overrides WHERE build_id = ?', [id]);
       await this.query('DELETE FROM project_builds WHERE id = ?', [id]);
       return { success: true };
     } catch (error) {
@@ -265,6 +344,7 @@ class MySQLDatabaseHandler {
       const tableName = this.getTableName(type);
       await this.query('DELETE FROM project_mappings WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
       await this.query('DELETE FROM build_mappings WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
+      await this.query('DELETE FROM build_mapping_overrides WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
       await this.query(`DELETE FROM ${tableName} WHERE id = ?`, [id]);
       return { success: true };
     } catch (error) {
@@ -413,6 +493,7 @@ class MySQLDatabaseHandler {
       await this.query('DELETE FROM carriers WHERE satellite_id = ?', [id]);
       await this.query('DELETE FROM project_mappings WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
       await this.query('DELETE FROM build_mappings WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
+      await this.query('DELETE FROM build_mapping_overrides WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
       await this.query('DELETE FROM satellites WHERE id = ?', [id]);
       return { success: true };
     } catch (error) {
@@ -583,6 +664,74 @@ class MySQLDatabaseHandler {
         'DELETE FROM build_mappings WHERE build_id = ? AND equipment_type = ? AND equipment_id = ?',
         [buildId, equipmentType, equipmentId]
       );
+      await this.query(
+        'DELETE FROM build_mapping_overrides WHERE build_id = ? AND equipment_type = ? AND equipment_id = ?',
+        [buildId, equipmentType, equipmentId]
+      );
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getBuildMappingOverrides(buildId) {
+    try {
+      const rows = await this.query(
+        'SELECT * FROM build_mapping_overrides WHERE build_id = ? ORDER BY updated_at DESC',
+        [buildId]
+      );
+
+      return {
+        success: true,
+        data: (rows || []).map((row) => {
+          let data = {};
+          try {
+            data = row.override_data ? JSON.parse(row.override_data) : {};
+          } catch {
+            data = {};
+          }
+
+          return {
+            id: row.id,
+            buildId: row.build_id,
+            equipmentType: row.equipment_type,
+            equipmentId: row.equipment_id,
+            data,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+          };
+        })
+      };
+    } catch (error) {
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
+  async setBuildMappingOverride(buildId, equipmentType, equipmentId, data) {
+    try {
+      const id = generateId();
+      const now = getMySQLDateTime();
+      await this.query(
+        `INSERT INTO build_mapping_overrides
+          (id, build_id, equipment_type, equipment_id, override_data, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+          override_data = VALUES(override_data),
+          updated_at = VALUES(updated_at)`,
+        [id, buildId, equipmentType, equipmentId, JSON.stringify(data || {}), now, now]
+      );
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteBuildMappingOverride(buildId, equipmentType, equipmentId) {
+    try {
+      await this.query(
+        'DELETE FROM build_mapping_overrides WHERE build_id = ? AND equipment_type = ? AND equipment_id = ?',
+        [buildId, equipmentType, equipmentId]
+      );
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -715,13 +864,19 @@ class MySQLDatabaseHandler {
       powerControl: 'power_control',
       vControl: 'v_control',
       khzOption: 'khz_option',
+      customField: 'custom_fields',
+      custom_field: 'custom_fields',
       customFields: 'custom_fields',
       switchType: 'switch_type',
+      switchOption: 'switch_options',
+      switch_option: 'switch_options',
       switchOptions: 'switch_options',
       motorType: 'motor_type',
       eastWest: 'east_west',
       northSouth: 'north_south',
       unicableType: 'unicable_type',
+      ifSlot: 'if_slots',
+      if_slot: 'if_slots',
       ifSlots: 'if_slots'
     };
     

@@ -36,6 +36,9 @@ interface ElectronDatabaseAPI {
   getBuildMappings: (buildId: string) => Promise<ApiResponse<any[]>>;
   createBuildMapping: (data: any) => Promise<ApiResponse<void>>;
   deleteBuildMapping: (buildId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
+  getBuildMappingOverrides: (buildId: string) => Promise<ApiResponse<any[]>>;
+  setBuildMappingOverride: (buildId: string, equipmentType: string, equipmentId: string, data: any) => Promise<ApiResponse<void>>;
+  deleteBuildMappingOverride: (buildId: string, equipmentType: string, equipmentId: string) => Promise<ApiResponse<void>>;
   getActivities: () => Promise<ApiResponse<UserActivity[]>>;
   createActivity: (data: any) => Promise<ApiResponse<void>>;
   getCustomTypes: (category: string) => Promise<ApiResponse<any[]>>;
@@ -288,6 +291,32 @@ class ApiService {
     return prepared;
   }
 
+  private normalizeEquipmentPayload(type: string, item: any): Equipment {
+    const normalized = { ...item };
+
+    if (type === 'lnbs' && typeof normalized.customFields === 'string') {
+      try { normalized.customFields = JSON.parse(normalized.customFields); } catch { normalized.customFields = []; }
+    }
+
+    if (type === 'switches' && typeof normalized.switchOptions === 'string') {
+      try { normalized.switchOptions = JSON.parse(normalized.switchOptions); } catch { normalized.switchOptions = []; }
+    }
+
+    if (type === 'unicables' && typeof normalized.ifSlots === 'string') {
+      try { normalized.ifSlots = JSON.parse(normalized.ifSlots); } catch { normalized.ifSlots = []; }
+    }
+
+    if (type === 'satellites' && typeof normalized.carriers === 'string') {
+      try { normalized.carriers = JSON.parse(normalized.carriers); } catch { normalized.carriers = []; }
+    }
+
+    return normalized;
+  }
+
+  private getOverrideKey(type: string, id: string): string {
+    return `${type}:${id}`;
+  }
+
   // ========== Duplicate checks ==========
   async checkDuplicate(type: string, name: string, excludeId?: string): Promise<boolean> {
     if (this.currentMode === 'local') return storageService.checkDuplicate(type, { name }, excludeId);
@@ -330,18 +359,75 @@ class ApiService {
   }
 
   // ========== Mapping Overrides ==========
-  getMappingOverride(buildId: string, type: string, id: string): any | null {
-    return storageService.getMappingOverride(buildId, type, id);
+  private async getBuildMappingOverrides(buildId: string): Promise<Record<string, any>> {
+    if (!buildId) return {};
+
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          const overrides = (await electron.database.getBuildMappingOverrides(buildId)).data || [];
+          return overrides.reduce((acc, override) => {
+            acc[this.getOverrideKey(override.equipmentType, override.equipmentId)] = override.data || {};
+            return acc;
+          }, {} as Record<string, any>);
+        } catch {
+          return {};
+        }
+      }
+      return {};
+    }
+
+    return {};
   }
 
-  setMappingOverride(buildId: string, type: string, id: string, data: any): void {
+  async getMappingOverride(buildId: string, type: string, id: string): Promise<any | null> {
+    if (this.currentMode === 'local') {
+      return storageService.getMappingOverride(buildId, type, id);
+    }
+
+    const overrides = await this.getBuildMappingOverrides(buildId);
+    return overrides[this.getOverrideKey(type, id)] || null;
+  }
+
+  async setMappingOverride(buildId: string, type: string, id: string, data: any): Promise<void> {
+    if (this.currentMode === 'local') {
+      storageService.setMappingOverride(buildId, type, id, data);
+      return;
+    }
+
+    if (this.currentMode === 'electron') {
+      const electron = this.getElectronAPI();
+      if (electron) {
+        try {
+          await electron.database.setBuildMappingOverride(buildId, type, id, data);
+          return;
+        } catch (error) {
+          console.error('Failed to persist build mapping override:', error);
+        }
+      }
+    }
+
     storageService.setMappingOverride(buildId, type, id, data);
   }
 
-  getEquipmentWithOverrides(type: string, buildId: string): Equipment[] {
+  async getEquipmentWithOverrides(type: string, buildId: string): Promise<Equipment[]> {
     if (this.currentMode === 'local') return storageService.getEquipmentWithOverrides(type, buildId);
-    const items = storageService.getEquipmentWithOverrides(type, buildId);
-    return items;
+
+    const baseItems = type === 'satellites'
+      ? await this.getSatellites()
+      : await this.getEquipment(type);
+
+    if (!buildId || this.currentMode !== 'electron') {
+      return baseItems.map(item => this.normalizeEquipmentPayload(type, item));
+    }
+
+    const overrides = await this.getBuildMappingOverrides(buildId);
+    return baseItems.map(item => {
+      const override = overrides[this.getOverrideKey(type, item.id)];
+      const merged = override ? { ...item, ...override, id: item.id } : item;
+      return this.normalizeEquipmentPayload(type, merged);
+    });
   }
 
   // ========== User Favorites ==========
