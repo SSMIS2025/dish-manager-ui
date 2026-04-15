@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -33,6 +33,10 @@ interface Carrier {
   fec: string;
   fecMode: string;
   factoryDefault: boolean;
+  modulationType: string;
+  tsid: string;
+  onid: string;
+  networkId: string;
   services: Service[];
 }
 
@@ -40,6 +44,7 @@ interface Service {
   id: string;
   name: string;
   frequency: string;
+  serviceType: string;
   videoPid: string;
   audioPid: string;
   pcrPid: string;
@@ -80,11 +85,9 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'satellite' | 'carrier' | 'service'; id: string; carrierId?: string } | null>(null);
   const [satelliteFilter, setSatelliteFilter] = useState("");
   
-  // Carrier/service search in detail dialog
   const [carrierSearch, setCarrierSearch] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
   
-  // Editing carrier/service
   const [editingCarrier, setEditingCarrier] = useState<{ idx: number; data: Partial<Carrier> } | null>(null);
   const [editingService, setEditingService] = useState<{ carrierIdx: number; serviceIdx: number; data: Partial<Service> } | null>(null);
   
@@ -113,7 +116,19 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       const allSatellites = await apiService.getSatellites();
       const satelliteData: SatelliteData[] = allSatellites.map(sat => ({
         id: sat.id, name: sat.name || "", position: sat.position || "", age: sat.age || "",
-        direction: sat.direction || "", carriers: sat.carriers || [],
+        direction: sat.direction || "", carriers: (sat.carriers || []).map((c: any) => ({
+          ...c,
+          modulationType: c.modulationType || '',
+          tsid: c.tsid || '',
+          onid: c.onid || '',
+          networkId: c.networkId || '',
+          services: (c.services || []).map((s: any) => ({
+            ...s,
+            serviceType: s.serviceType || '',
+            favGroup: s.favGroup || '',
+            factoryDefault: s.factoryDefault || false,
+          }))
+        })),
         mappedLnb: sat.mappedLnb || "", mappedSwitch: sat.mappedSwitch || "", mappedMotor: sat.mappedMotor || ""
       }));
       setSatellites(satelliteData);
@@ -227,8 +242,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline carrier add
   const handleStartAddCarrier = () => {
-    if (newCarrierRow) return; // Prevent duplicate rows
-    setNewCarrierRow({ name: "", frequency: "", polarization: "Horizontal", symbolRate: "", fec: "Auto", fecMode: "Auto", factoryDefault: false, services: [] });
+    if (newCarrierRow) return;
+    setNewCarrierRow({ name: "", frequency: "", polarization: "Horizontal", symbolRate: "", fec: "Auto", fecMode: "Auto", factoryDefault: false, modulationType: "", tsid: "", onid: "", networkId: "", services: [] as Service[] });
   };
 
   const handleSaveInlineCarrier = async () => {
@@ -244,7 +259,12 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         name: newCarrierRow.name!, frequency: newCarrierRow.frequency!,
         polarization: newCarrierRow.polarization || "Horizontal", symbolRate: newCarrierRow.symbolRate || "",
         fec: newCarrierRow.fec || "Auto", fecMode: newCarrierRow.fecMode || "Auto",
-        factoryDefault: newCarrierRow.factoryDefault || false, services: []
+        factoryDefault: newCarrierRow.factoryDefault || false,
+        modulationType: newCarrierRow.modulationType || "",
+        tsid: newCarrierRow.tsid || "",
+        onid: newCarrierRow.onid || "",
+        networkId: newCarrierRow.networkId || "",
+        services: []
       };
       const updatedSatellite = { ...selectedSatellite, carriers: [...selectedSatellite.carriers, newCarrier] };
       await apiService.updateSatellite(selectedSatellite.id, updatedSatellite);
@@ -257,8 +277,8 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
   // Inline service add
   const handleStartAddService = (carrierId: string) => {
-    if (newServiceRows[carrierId]) return; // Prevent duplicate rows
-    setNewServiceRows(prev => ({ ...prev, [carrierId]: { name: "", frequency: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "", favGroup: "", factoryDefault: false, preference: "", scramble: false } }));
+    if (newServiceRows[carrierId]) return;
+    setNewServiceRows(prev => ({ ...prev, [carrierId]: { name: "", frequency: "", serviceType: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "", favGroup: "", factoryDefault: false, preference: "", scramble: false } }));
   };
 
   const handleSaveInlineService = async (carrierId: string) => {
@@ -273,6 +293,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       const newService: Service = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: svcData.name!, frequency: svcData.frequency || carrier?.frequency || "",
+        serviceType: svcData.serviceType || "",
         videoPid: svcData.videoPid || "", audioPid: svcData.audioPid || "", pcrPid: svcData.pcrPid || "",
         programNumber: svcData.programNumber || "", favGroup: svcData.favGroup || "",
         factoryDefault: svcData.factoryDefault || false, preference: svcData.preference || "", scramble: svcData.scramble || false
@@ -361,7 +382,6 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
     return item.name || "-";
   };
 
-  // Filter carriers and services in detail dialog
   const getFilteredCarriers = () => {
     if (!selectedSatellite) return [];
     let carriers = selectedSatellite.carriers;
@@ -469,6 +489,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
               <Satellite className="h-5 w-5 text-primary" />
               {editingSatellite ? "Edit Satellite" : "Add New Satellite"}
             </DialogTitle>
+            <DialogDescription>Fill in the satellite details below.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <InlineFormField label="Name" required>
@@ -502,6 +523,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
       {/* Satellite Detail Popup */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogDescription className="sr-only">Satellite details with carriers and services</DialogDescription>
           {selectedSatellite && (
             <>
               <DialogHeader className="pb-3 border-b">
@@ -539,7 +561,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 </div>
               </div>
 
-              {/* Search for carriers and services */}
+              {/* Search */}
               <div className="flex gap-3 mt-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -551,7 +573,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                 </div>
               </div>
 
-              {/* Carriers with Accordion */}
+              {/* Carriers */}
               <div className="flex items-center justify-between mt-4 mb-2">
                 <h3 className="font-semibold">Carriers</h3>
                 <Button size="sm" onClick={handleStartAddCarrier}>
@@ -582,19 +604,21 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                       <label className="text-xs text-muted-foreground">Symbol Rate</label>
                       <Input value={newCarrierRow.symbolRate || ""} onChange={(e) => setNewCarrierRow({ ...newCarrierRow, symbolRate: e.target.value })} placeholder="22000" className="h-8" />
                     </div>
+                    <div className="w-24">
+                      <label className="text-xs text-muted-foreground">Modulation</label>
+                      <Input value={newCarrierRow.modulationType || ""} onChange={(e) => setNewCarrierRow({ ...newCarrierRow, modulationType: e.target.value })} placeholder="QPSK" className="h-8" />
+                    </div>
                     <div className="w-20">
-                      <label className="text-xs text-muted-foreground">FEC</label>
-                      <Select value={newCarrierRow.fec || "Auto"} onValueChange={(v) => setNewCarrierRow({ ...newCarrierRow, fec: v })}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>{FEC_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <label className="text-xs text-muted-foreground">TSID</label>
+                      <Input value={newCarrierRow.tsid || ""} onChange={(e) => setNewCarrierRow({ ...newCarrierRow, tsid: e.target.value })} className="h-8" />
+                    </div>
+                    <div className="w-20">
+                      <label className="text-xs text-muted-foreground">ONID</label>
+                      <Input value={newCarrierRow.onid || ""} onChange={(e) => setNewCarrierRow({ ...newCarrierRow, onid: e.target.value })} className="h-8" />
                     </div>
                     <div className="w-24">
-                      <label className="text-xs text-muted-foreground">FEC Mode</label>
-                      <Select value={newCarrierRow.fecMode || "Auto"} onValueChange={(v) => setNewCarrierRow({ ...newCarrierRow, fecMode: v })}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>{FEC_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <label className="text-xs text-muted-foreground">Network ID</label>
+                      <Input value={newCarrierRow.networkId || ""} onChange={(e) => setNewCarrierRow({ ...newCarrierRow, networkId: e.target.value })} className="h-8" />
                     </div>
                     <div className="flex gap-1">
                       <Button size="sm" className="h-8" onClick={handleSaveInlineCarrier} disabled={isSaving}>
@@ -611,7 +635,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
               {getFilteredCarriers().length === 0 && !newCarrierRow ? (
                 <p className="text-center text-muted-foreground py-8">No carriers found. Click "Add Carrier" to create one.</p>
               ) : (
-                <Accordion type="multiple" className="w-full">
+                <Accordion type="single" collapsible className="w-full">
                   {getFilteredCarriers().map((carrier, cIdx) => {
                     const actualIdx = selectedSatellite.carriers.findIndex(c => c.id === carrier.id);
                     const filteredServices = serviceSearch
@@ -620,27 +644,33 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
                     return (
                       <AccordionItem key={carrier.id} value={carrier.id} className="border rounded-lg mb-2 bg-accent/20">
-                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                          <div className="flex items-center gap-3 flex-1 text-left">
-                            <span className="font-medium">{carrier.name}</span>
-                            <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>
-                            <Badge variant="outline" className="text-xs">{carrier.polarization}</Badge>
-                            <Badge variant="secondary" className="text-xs">{carrier.services?.length || 0} services</Badge>
-                            <div className="ml-auto flex gap-1 mr-2" onClick={(e) => e.stopPropagation()}>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(actualIdx)}>
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
+                        <div className="flex items-center px-4 py-3">
+                          <AccordionTrigger className="flex-1 hover:no-underline p-0 [&>svg]:ml-2">
+                            <div className="flex items-center gap-3 flex-1 text-left">
+                              <span className="font-medium">{carrier.name}</span>
+                              <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950">{carrier.frequency} MHz</Badge>
+                              <Badge variant="outline" className="text-xs">{carrier.polarization}</Badge>
+                              {carrier.modulationType && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-950">{carrier.modulationType}</Badge>}
+                              <Badge variant="secondary" className="text-xs">{carrier.services?.length || 0} services</Badge>
                             </div>
+                          </AccordionTrigger>
+                          <div className="flex gap-1 ml-2">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEditCarrier(actualIdx)}>
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDeleteTarget({ type: 'carrier', id: carrier.id })}>
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
                           </div>
-                        </AccordionTrigger>
+                        </div>
                         <AccordionContent className="px-4 pb-4">
-                          <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-muted/20 rounded-lg text-sm">
+                          <div className="grid grid-cols-5 gap-3 mb-4 p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg text-sm">
                             <div><span className="text-muted-foreground">Symbol Rate:</span> {carrier.symbolRate || '-'}</div>
                             <div><span className="text-muted-foreground">FEC:</span> {carrier.fec || '-'}</div>
                             <div><span className="text-muted-foreground">FEC Mode:</span> {carrier.fecMode || '-'}</div>
+                            <div><span className="text-muted-foreground">TSID:</span> {carrier.tsid || '-'}</div>
+                            <div><span className="text-muted-foreground">ONID:</span> {carrier.onid || '-'}</div>
+                            <div><span className="text-muted-foreground">Network ID:</span> {carrier.networkId || '-'}</div>
                             <div><span className="text-muted-foreground">Factory Default:</span> {carrier.factoryDefault ? 'Yes' : 'No'}</div>
                           </div>
 
@@ -654,11 +684,15 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
 
                           {/* Inline new service row */}
                           {newServiceRows[carrier.id] && (
-                            <div className="border rounded-lg p-3 mb-3 bg-primary/5">
+                            <div className="border rounded-lg p-3 mb-3 bg-green-50/50 dark:bg-green-950/20">
                               <div className="flex gap-2 items-end flex-wrap">
                                 <div className="flex-1 min-w-[100px]">
                                   <label className="text-xs text-muted-foreground">Name *</label>
                                   <Input value={newServiceRows[carrier.id]?.name || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, name: e.target.value } }))} placeholder="Service name" className="h-8" />
+                                </div>
+                                <div className="w-20">
+                                  <label className="text-xs text-muted-foreground">Type</label>
+                                  <Input value={newServiceRows[carrier.id]?.serviceType || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, serviceType: e.target.value } }))} placeholder="TV" className="h-8" />
                                 </div>
                                 <div className="w-24">
                                   <label className="text-xs text-muted-foreground">Video PID</label>
@@ -675,6 +709,14 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                                 <div className="w-24">
                                   <label className="text-xs text-muted-foreground">Program #</label>
                                   <Input value={newServiceRows[carrier.id]?.programNumber || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, programNumber: e.target.value } }))} placeholder="6940" className="h-8" />
+                                </div>
+                                <div className="w-20">
+                                  <label className="text-xs text-muted-foreground">Fav Group</label>
+                                  <Input value={newServiceRows[carrier.id]?.favGroup || ""} onChange={(e) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, favGroup: e.target.value } }))} className="h-8" />
+                                </div>
+                                <div className="flex items-center gap-1 pt-4">
+                                  <Checkbox checked={newServiceRows[carrier.id]?.factoryDefault || false} onCheckedChange={(v) => setNewServiceRows(prev => ({ ...prev, [carrier.id]: { ...prev[carrier.id]!, factoryDefault: !!v } }))} />
+                                  <span className="text-xs">Default</span>
                                 </div>
                                 <div className="flex gap-1">
                                   <Button size="sm" className="h-8" onClick={() => handleSaveInlineService(carrier.id)} disabled={isSaving}>
@@ -693,14 +735,17 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                           ) : (
                             <div className="rounded-lg border overflow-hidden">
                               <Table>
-                                <TableHeader className="bg-secondary/30">
+                                <TableHeader className="bg-green-50/30 dark:bg-green-950/10">
                                   <TableRow>
                                     <TableHead className="w-12">#</TableHead>
                                     <TableHead>Name</TableHead>
+                                    <TableHead>Type</TableHead>
                                     <TableHead>Video PID</TableHead>
                                     <TableHead>Audio PID</TableHead>
                                     <TableHead>PCR PID</TableHead>
                                     <TableHead>Program #</TableHead>
+                                    <TableHead>Fav Group</TableHead>
+                                    <TableHead>Default</TableHead>
                                     <TableHead>Scramble</TableHead>
                                     <TableHead className="w-20">Actions</TableHead>
                                   </TableRow>
@@ -712,10 +757,13 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                                       <TableRow key={service.id} className="hover:bg-muted/30">
                                         <TableCell>{sIdx + 1}</TableCell>
                                         <TableCell className="font-medium">{service.name}</TableCell>
+                                        <TableCell>{service.serviceType || '-'}</TableCell>
                                         <TableCell>{service.videoPid || '-'}</TableCell>
                                         <TableCell>{service.audioPid || '-'}</TableCell>
                                         <TableCell>{service.pcrPid || '-'}</TableCell>
                                         <TableCell>{service.programNumber || '-'}</TableCell>
+                                        <TableCell>{service.favGroup || '-'}</TableCell>
+                                        <TableCell>{service.factoryDefault ? <Badge variant="secondary" className="text-xs">Yes</Badge> : '-'}</TableCell>
                                         <TableCell>{service.scramble ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
                                         <TableCell>
                                           <div className="flex gap-1">
@@ -750,6 +798,7 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         <DialogContent className="max-w-md">
           <DialogHeader className="pb-4 border-b">
             <DialogTitle>Edit Carrier</DialogTitle>
+            <DialogDescription>Modify carrier details below.</DialogDescription>
           </DialogHeader>
           {editingCarrier && (
             <div className="space-y-3 py-3">
@@ -774,6 +823,10 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
                   <SelectContent>{FEC_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </InlineFormField>
+              <InlineFormField label="Modulation"><Input value={editingCarrier.data.modulationType || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, modulationType: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="TSID"><Input value={editingCarrier.data.tsid || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, tsid: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="ONID"><Input value={editingCarrier.data.onid || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, onid: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Network ID"><Input value={editingCarrier.data.networkId || ""} onChange={(e) => setEditingCarrier({ ...editingCarrier, data: { ...editingCarrier.data, networkId: e.target.value } })} /></InlineFormField>
             </div>
           )}
           <div className="flex justify-end gap-2 pt-4 border-t">
@@ -788,16 +841,24 @@ const SatelliteManagement = ({ username }: SatelliteManagementProps) => {
         <DialogContent className="max-w-md">
           <DialogHeader className="pb-4 border-b">
             <DialogTitle>Edit Service</DialogTitle>
+            <DialogDescription>Modify service details below.</DialogDescription>
           </DialogHeader>
           {editingService && (
             <div className="space-y-3 py-3">
               <InlineFormField label="Name"><Input value={editingService.data.name || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, name: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Type"><Input value={editingService.data.serviceType || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, serviceType: e.target.value } })} placeholder="TV, Radio, Data" /></InlineFormField>
               <InlineFormField label="Video PID"><Input value={editingService.data.videoPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, videoPid: e.target.value } })} /></InlineFormField>
               <InlineFormField label="Audio PID"><Input value={editingService.data.audioPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, audioPid: e.target.value } })} /></InlineFormField>
               <InlineFormField label="PCR PID"><Input value={editingService.data.pcrPid || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, pcrPid: e.target.value } })} /></InlineFormField>
               <InlineFormField label="Program #"><Input value={editingService.data.programNumber || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, programNumber: e.target.value } })} /></InlineFormField>
               <InlineFormField label="Fav Group"><Input value={editingService.data.favGroup || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, favGroup: e.target.value } })} /></InlineFormField>
               <InlineFormField label="Preference"><Input value={editingService.data.preference || ""} onChange={(e) => setEditingService({ ...editingService, data: { ...editingService.data, preference: e.target.value } })} /></InlineFormField>
+              <InlineFormField label="Factory Default">
+                <div className="flex items-center gap-2 pt-2">
+                  <Checkbox checked={editingService.data.factoryDefault || false} onCheckedChange={(v) => setEditingService({ ...editingService, data: { ...editingService.data, factoryDefault: !!v } })} />
+                  <span className="text-sm">Factory Default</span>
+                </div>
+              </InlineFormField>
               <InlineFormField label="Scramble">
                 <div className="flex items-center gap-2 pt-2">
                   <Checkbox checked={editingService.data.scramble || false} onCheckedChange={(v) => setEditingService({ ...editingService, data: { ...editingService.data, scramble: !!v } })} />
