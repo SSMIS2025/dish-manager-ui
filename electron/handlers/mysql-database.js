@@ -94,12 +94,31 @@ class MySQLDatabaseHandler {
       }
     };
 
+    // LNB columns
     await ensureColumn('lnbs', 'custom_fields', '`custom_fields` TEXT DEFAULT NULL');
+    
+    // Switch columns
     await ensureColumn('switches', 'switch_options', '`switch_options` TEXT DEFAULT NULL');
+    
+    // Unicable columns
     await ensureColumn('unicables', 'if_slots', '`if_slots` TEXT DEFAULT NULL');
+    
+    // Satellite columns
     await ensureColumn('satellites', 'mapped_lnb', '`mapped_lnb` VARCHAR(50) DEFAULT NULL');
     await ensureColumn('satellites', 'mapped_switch', '`mapped_switch` TEXT DEFAULT NULL');
     await ensureColumn('satellites', 'mapped_motor', '`mapped_motor` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('satellites', 'switch_option', '`switch_option` VARCHAR(255) DEFAULT NULL');
+
+    // Carrier extra columns
+    await ensureColumn('carriers', 'modulation_type', '`modulation_type` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('carriers', 'tsid', '`tsid` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('carriers', 'onid', '`onid` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('carriers', 'network_id', '`network_id` VARCHAR(50) DEFAULT NULL');
+
+    // Service extra columns
+    await ensureColumn('services', 'service_type', '`service_type` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('services', 'fav_group', '`fav_group` VARCHAR(50) DEFAULT NULL');
+    await ensureColumn('services', 'factory_default', '`factory_default` TINYINT(1) DEFAULT 0');
 
     await run(`
       CREATE TABLE IF NOT EXISTS custom_types (
@@ -342,9 +361,11 @@ class MySQLDatabaseHandler {
   async deleteEquipment(type, id) {
     try {
       const tableName = this.getTableName(type);
+      // Only remove from project_mappings and build_mappings (references)
+      // but keep build_mapping_overrides so project mapping data persists independently
       await this.query('DELETE FROM project_mappings WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
       await this.query('DELETE FROM build_mappings WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
-      await this.query('DELETE FROM build_mapping_overrides WHERE equipment_type = ? AND equipment_id = ?', [type, id]);
+      // Note: NOT deleting build_mapping_overrides - those are independent copies
       await this.query(`DELETE FROM ${tableName} WHERE id = ?`, [id]);
       return { success: true };
     } catch (error) {
@@ -355,7 +376,6 @@ class MySQLDatabaseHandler {
   async checkEquipmentDuplicate(type, name, excludeId) {
     try {
       const tableName = this.getTableName(type);
-      // For switches, check by switch_type instead of name
       let fieldName = 'name';
       if (type === 'switches') fieldName = 'switch_type';
       
@@ -396,8 +416,8 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'INSERT INTO satellites (id, name, position, orbital_position, polarization, direction, age, mapped_lnb, mapped_switch, mapped_motor, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', now, now]
+        'INSERT INTO satellites (id, name, position, orbital_position, polarization, direction, age, mapped_lnb, mapped_switch, mapped_motor, switch_option, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', data.switchOption || '', now, now]
       );
       
       if (data.carriers && Array.isArray(data.carriers)) {
@@ -418,8 +438,8 @@ class MySQLDatabaseHandler {
     const now = getMySQLDateTime();
     
     await this.query(
-      'INSERT INTO carriers (id, satellite_id, name, frequency, symbol_rate, polarization, fec, fec_mode, factory_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || data.symbol_rate || '', data.polarization || '', data.fec || '', data.fecMode || data.fec_mode || '', data.factoryDefault ? 1 : 0, now, now]
+      'INSERT INTO carriers (id, satellite_id, name, frequency, symbol_rate, polarization, fec, fec_mode, factory_default, modulation_type, tsid, onid, network_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, satelliteId, data.name || '', data.frequency || '', data.symbolRate || data.symbol_rate || '', data.polarization || '', data.fec || '', data.fecMode || data.fec_mode || '', data.factoryDefault ? 1 : 0, data.modulationType || data.modulation_type || '', data.tsid || '', data.onid || '', data.networkId || data.network_id || '', now, now]
     );
     
     if (data.services && Array.isArray(data.services)) {
@@ -460,8 +480,8 @@ class MySQLDatabaseHandler {
       const now = getMySQLDateTime();
       
       await this.query(
-        'UPDATE satellites SET name = ?, position = ?, orbital_position = ?, polarization = ?, direction = ?, age = ?, mapped_lnb = ?, mapped_switch = ?, mapped_motor = ?, updated_at = ? WHERE id = ?',
-        [data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', now, id]
+        'UPDATE satellites SET name = ?, position = ?, orbital_position = ?, polarization = ?, direction = ?, age = ?, mapped_lnb = ?, mapped_switch = ?, mapped_motor = ?, switch_option = ?, updated_at = ? WHERE id = ?',
+        [data.name, data.position || '', data.orbitalPosition || data.position || '', data.polarization || '', data.direction || '', data.age || '', data.mappedLnb || '', data.mappedSwitch || '', data.mappedMotor || '', data.switchOption || '', now, id]
       );
       
       // Update carriers - delete and recreate
@@ -493,7 +513,7 @@ class MySQLDatabaseHandler {
       await this.query('DELETE FROM carriers WHERE satellite_id = ?', [id]);
       await this.query('DELETE FROM project_mappings WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
       await this.query('DELETE FROM build_mappings WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
-      await this.query('DELETE FROM build_mapping_overrides WHERE equipment_type = ? AND equipment_id = ?', ['satellites', id]);
+      // Keep overrides for independent project mapping data
       await this.query('DELETE FROM satellites WHERE id = ?', [id]);
       return { success: true };
     } catch (error) {
@@ -855,6 +875,7 @@ class MySQLDatabaseHandler {
     
     if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name); }
     
+    // Complete field mapping for all equipment types including satellites
     const fieldMap = {
       lowFrequency: 'low_frequency',
       highFrequency: 'high_frequency',
@@ -868,8 +889,8 @@ class MySQLDatabaseHandler {
       custom_field: 'custom_fields',
       customFields: 'custom_fields',
       switchType: 'switch_type',
-      switchOption: 'switch_options',
-      switch_option: 'switch_options',
+      switchOption: 'switch_option',
+      switch_option: 'switch_option',
       switchOptions: 'switch_options',
       motorType: 'motor_type',
       eastWest: 'east_west',
@@ -877,18 +898,29 @@ class MySQLDatabaseHandler {
       unicableType: 'unicable_type',
       ifSlot: 'if_slots',
       if_slot: 'if_slots',
-      ifSlots: 'if_slots'
+      ifSlots: 'if_slots',
+      // Satellite-specific fields
+      mappedLnb: 'mapped_lnb',
+      mappedSwitch: 'mapped_switch',
+      mappedMotor: 'mapped_motor',
+      orbitalPosition: 'orbital_position',
     };
     
+    // JSON fields that need stringification
+    const jsonFields = ['switch_options', 'if_slots', 'custom_fields'];
+    
+    // Fields to skip (handled separately or metadata)
+    const skipFields = ['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at', 'name', 'carriers', 'services'];
+    
     Object.keys(data).forEach(key => {
-      if (['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at', 'name'].includes(key)) return;
+      if (skipFields.includes(key)) return;
       const dbField = fieldMap[key] || key;
       let value = data[key];
       // Stringify objects for JSON fields
-      if ((dbField === 'switch_options' || dbField === 'if_slots' || dbField === 'custom_fields') && typeof value === 'object') {
+      if (jsonFields.includes(dbField) && typeof value === 'object') {
         value = JSON.stringify(value);
       }
-      updates.push(`${dbField} = ?`);
+      updates.push(`\`${dbField}\` = ?`);
       values.push(value);
     });
     
@@ -992,6 +1024,7 @@ class MySQLDatabaseHandler {
       mappedLnb: row.mapped_lnb || '',
       mappedSwitch: row.mapped_switch || '',
       mappedMotor: row.mapped_motor || '',
+      switchOption: row.switch_option || '',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       carriers: (row.carriers || []).map(c => ({
@@ -1003,17 +1036,21 @@ class MySQLDatabaseHandler {
         fec: c.fec,
         fecMode: c.fec_mode,
         factoryDefault: c.factory_default === 1,
+        modulationType: c.modulation_type || '',
+        tsid: c.tsid || '',
+        onid: c.onid || '',
+        networkId: c.network_id || '',
         services: (c.services || []).map(s => ({
           id: s.id,
           name: s.name,
           frequency: s.frequency,
-          serviceType: s.service_type,
+          serviceType: s.service_type || '',
           serviceId: s.service_id_number,
           videoPid: s.video_pid,
           audioPid: s.audio_pid,
           pcrPid: s.pcr_pid,
           programNumber: s.program_number,
-          favGroup: s.fav_group,
+          favGroup: s.fav_group || '',
           factoryDefault: s.factory_default === 1,
           preference: s.preference,
           scramble: s.scramble === 1

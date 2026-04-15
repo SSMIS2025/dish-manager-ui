@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
@@ -23,7 +23,7 @@ import {
   DEFAULT_LNB_BANDS, LNB_POWER_CONTROLS, LNB_V_CONTROLS, LNB_KHZ_OPTIONS,
   DEFAULT_SWITCH_TYPES, DEFAULT_MOTOR_TYPES, MOTOR_EAST_WEST, MOTOR_NORTH_SOUTH,
   DEFAULT_UNICABLE_TYPES, UNICABLE_STATUS_OPTIONS, UNICABLE_PORT_OPTIONS,
-  SATELLITE_DIRECTIONS, POLARIZATIONS, FEC_OPTIONS, getMergedTypes
+  SATELLITE_DIRECTIONS, POLARIZATIONS, FEC_OPTIONS, FEC_MODES, getMergedTypes
 } from "@/config/equipmentTypes";
 
 interface ProjectMappingProps {
@@ -74,28 +74,23 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   const [unicableSearch, setUnicableSearch] = useState("");
   const [satelliteSearch, setSatelliteSearch] = useState("");
   
-  // Controlled tab state - persists across interactions
   const [activeTab, setActiveTab] = useState("lnbs");
   
-  // Edit popup state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editingType, setEditingType] = useState<string>("");
   const [editFormData, setEditFormData] = useState<any>({});
   
-  // View popup state
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingItem, setViewingItem] = useState<any>(null);
   const [viewingType, setViewingType] = useState<string>("");
   
-  // Satellite detail dialog
   const [isSatelliteDialogOpen, setIsSatelliteDialogOpen] = useState(false);
   const [satEditData, setSatEditData] = useState<any>(null);
   const [isSavingSatellite, setIsSavingSatellite] = useState(false);
   
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
 
-  // Global merged types
   const lnbBandTypes = getMergedTypes(DEFAULT_LNB_BANDS, apiService.getCustomTypes('lnb_band'));
   const switchTypes = getMergedTypes(DEFAULT_SWITCH_TYPES, apiService.getCustomTypes('switch_type'));
   const motorTypes = getMergedTypes(DEFAULT_MOTOR_TYPES, apiService.getCustomTypes('motor_type'));
@@ -125,7 +120,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         await loadAllEquipment();
       }
     };
-
     loadBuildContext();
   }, [selectedBuildId]);
 
@@ -220,7 +214,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     return buildMappings.filter(m => m.equipmentType === equipmentType).length;
   };
 
-  // Edit popup handlers
   const handleOpenEdit = (item: any, type: string) => {
     setEditingItem(item);
     setEditingType(type);
@@ -232,11 +225,17 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     if (!editingItem || !editingType) return;
     setIsUpdatingEquipment(true);
     try {
-      // Save as mapping override - stored separately, doesn't affect global
       if (selectedBuildId) {
-        const overrideData = { ...editFormData };
-        await apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, overrideData);
-        await loadAllEquipment(selectedBuildId);
+        // Save as build-specific override - doesn't affect global data
+        await apiService.setMappingOverride(selectedBuildId, editingType, editingItem.id, editFormData);
+        // Update local state immediately
+        const updateList = (list: any[], setList: (l: any[]) => void) => {
+          setList(list.map(item => item.id === editingItem.id ? { ...item, ...editFormData, id: item.id } : item));
+        };
+        if (editingType === 'lnbs') updateList(allLnbs, setAllLnbs);
+        else if (editingType === 'switches') updateList(allSwitches, setAllSwitches);
+        else if (editingType === 'motors') updateList(allMotors, setAllMotors);
+        else if (editingType === 'unicables') updateList(allUnicables, setAllUnicables);
         toast({ title: "Updated", description: "Equipment override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateEquipment(editingType, editingItem.id, editFormData);
@@ -258,7 +257,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setViewDialogOpen(true);
   };
 
-  // Satellite edit handler
   const handleOpenSatelliteEdit = (sat: any) => {
     setSatEditData(JSON.parse(JSON.stringify(sat)));
     setIsSatelliteDialogOpen(true);
@@ -269,9 +267,8 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setIsSavingSatellite(true);
     try {
       if (selectedBuildId) {
-        // Store as mapping override - doesn't affect global satellite
         await apiService.setMappingOverride(selectedBuildId, 'satellites', satEditData.id, satEditData);
-        await loadAllEquipment(selectedBuildId);
+        setAllSatellites(prev => prev.map(s => s.id === satEditData.id ? { ...s, ...satEditData, id: s.id } : s));
         toast({ title: "Updated", description: "Satellite override saved for this build (global data unchanged)." });
       } else {
         await apiService.updateSatellite(satEditData.id, satEditData);
@@ -287,7 +284,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
   };
 
   const addCarrierToSatEdit = () => {
-    const newCarrier = { id: `c-${Date.now()}`, name: "", frequency: "", polarization: "", symbolRate: "", fec: "", services: [] };
+    const newCarrier = { id: `c-${Date.now()}`, name: "", frequency: "", polarization: "", symbolRate: "", fec: "", fecMode: "", modulationType: "", tsid: "", onid: "", networkId: "", services: [] };
     setSatEditData({ ...satEditData, carriers: [...(satEditData.carriers || []), newCarrier] });
   };
 
@@ -303,7 +300,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
   const addServiceToCarrier = (carrierIdx: number) => {
     const carriers = [...(satEditData.carriers || [])];
-    const newService = { id: `s-${Date.now()}`, name: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "" };
+    const newService = { id: `s-${Date.now()}`, name: "", serviceType: "", videoPid: "", audioPid: "", pcrPid: "", programNumber: "", favGroup: "", factoryDefault: false };
     carriers[carrierIdx] = { ...carriers[carrierIdx], services: [...(carriers[carrierIdx].services || []), newService] };
     setSatEditData({ ...satEditData, carriers });
   };
@@ -322,7 +319,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     setSatEditData({ ...satEditData, carriers });
   };
 
-  // Filter functions
   const filteredLnbs = allLnbs.filter(l => l.name?.toLowerCase().includes(lnbSearch.toLowerCase()) || l.bandType?.toLowerCase().includes(lnbSearch.toLowerCase()));
   const filteredSwitches = allSwitches.filter(s => s.switchType?.toLowerCase().includes(switchSearch.toLowerCase()));
   const filteredMotors = allMotors.filter(m => m.motorType?.toLowerCase().includes(motorSearch.toLowerCase()));
@@ -458,7 +454,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     satellites: allSatellites.filter(s => isMapped('satellites', s.id))
   });
 
-  // Render equipment table for each tab
   const renderEquipmentTable = (items: any[], type: string, columns: { key: string; label: string }[]) => {
     return (
       <div className="rounded-lg border overflow-hidden">
@@ -527,7 +522,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     );
   };
 
-  // Render view detail content
   const renderViewContent = () => {
     if (!viewingItem) return null;
     const items: { label: string; value: any }[] = [];
@@ -556,7 +550,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     );
   };
 
-  // Render edit form content in dialog - uses global type definitions
   const renderEditContent = () => {
     if (!editingItem || !editingType) return null;
     if (editingType === 'lnbs') {
@@ -687,7 +680,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                     <Input className="h-7 text-xs flex-1" value={slot.frequency || ""} placeholder="IF Frequency (MHz)"
                       onChange={(e) => { const newSlots = [...slots]; newSlots[idx] = { ...newSlots[idx], frequency: e.target.value }; setEditFormData({...editFormData, ifSlots: newSlots}); }} />
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
-                      onClick={() => setEditFormData({...editFormData, ifSlots: slots.filter((_: any, i: number) => i !== idx).map((s: any, i: number) => ({...s, slotNumber: i + 1}))})}>
+                      onClick={() => setEditFormData({...editFormData, ifSlots: slots.filter((_: any, i: number) => i !== idx)})}>
                       <Trash2 className="h-3 w-3 text-destructive" />
                     </Button>
                   </div>
@@ -703,7 +696,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -716,7 +708,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </div>
       </div>
 
-      {/* Project/Build Selection */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4 flex-wrap">
@@ -763,7 +754,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </CardContent>
       </Card>
 
-      {/* Equipment Mapping - Table View */}
       {selectedBuildId ? (
         <Card>
           <CardHeader className="pb-4">
@@ -832,6 +822,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <Eye className="h-5 w-5 text-primary" />
               Equipment Details
             </DialogTitle>
+            <DialogDescription>View equipment information.</DialogDescription>
           </DialogHeader>
           <div className="py-4">{renderViewContent()}</div>
         </DialogContent>
@@ -845,6 +836,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <Edit className="h-5 w-5 text-primary" />
               Edit Equipment {selectedBuildId && <Badge variant="secondary" className="text-xs">Build Override</Badge>}
             </DialogTitle>
+            <DialogDescription>Modify equipment details. {selectedBuildId ? 'Changes only affect this build.' : 'Changes apply globally.'}</DialogDescription>
           </DialogHeader>
           <div className="py-4">{renderEditContent()}</div>
           <div className="flex justify-end gap-2 pt-4 border-t">
@@ -857,7 +849,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
         </DialogContent>
       </Dialog>
 
-      {/* Satellite Edit Dialog - Accordion based */}
+      {/* Satellite Edit Dialog */}
       <Dialog open={isSatelliteDialogOpen} onOpenChange={setIsSatelliteDialogOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
           <DialogHeader className="pb-4 border-b">
@@ -866,11 +858,11 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               Edit Satellite - {satEditData?.name || ''}
               {selectedBuildId && <Badge variant="secondary" className="text-xs">Build Override</Badge>}
             </DialogTitle>
+            <DialogDescription>Modify satellite, carriers, and services. {selectedBuildId ? 'Changes only affect this build.' : 'Changes apply globally.'}</DialogDescription>
           </DialogHeader>
           {satEditData && (
             <ScrollArea className="h-[70vh]">
               <div className="space-y-4 pr-4">
-                {/* Basic Info */}
                 <Card>
                   <CardHeader className="py-3"><CardTitle className="text-sm">Satellite Information</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
@@ -891,7 +883,6 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   </CardContent>
                 </Card>
 
-                {/* Equipment Mappings - only show items mapped to this build */}
                 <Card>
                   <CardHeader className="py-3"><CardTitle className="text-sm">Equipment Mappings</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
@@ -928,7 +919,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                   </CardContent>
                 </Card>
 
-                {/* Carriers - Accordion based */}
+                {/* Carriers */}
                 <Card>
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between">
@@ -940,21 +931,23 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                     {(satEditData.carriers || []).length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">No carriers. Click "Add Carrier" to create one.</p>
                     ) : (
-                      <Accordion type="multiple" className="w-full">
+                      <Accordion type="single" collapsible className="w-full">
                         {(satEditData.carriers || []).map((carrier: any, cIdx: number) => (
                           <AccordionItem key={carrier.id || cIdx} value={carrier.id || `carrier-${cIdx}`} className="border rounded-lg mb-2">
-                            <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                              <div className="flex items-center gap-3 flex-1 text-left">
-                                <span className="font-medium">{carrier.name || `Carrier ${cIdx + 1}`}</span>
-                                {carrier.frequency && <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>}
-                                <Badge variant="secondary" className="text-xs">{(carrier.services || []).length} services</Badge>
-                                <div className="ml-auto mr-2" onClick={(e) => e.stopPropagation()}>
-                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeCarrierFromSatEdit(cIdx)}>
-                                    <Trash2 className="h-3 w-3 text-destructive" />
-                                  </Button>
+                            <div className="flex items-center px-4 py-3">
+                              <AccordionTrigger className="flex-1 hover:no-underline p-0 [&>svg]:ml-2">
+                                <div className="flex items-center gap-3 flex-1 text-left">
+                                  <span className="font-medium">{carrier.name || `Carrier ${cIdx + 1}`}</span>
+                                  {carrier.frequency && <Badge variant="outline" className="text-xs">{carrier.frequency} MHz</Badge>}
+                                  <Badge variant="secondary" className="text-xs">{(carrier.services || []).length} services</Badge>
                                 </div>
+                              </AccordionTrigger>
+                              <div className="ml-2" onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => removeCarrierFromSatEdit(cIdx)}>
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
                               </div>
-                            </AccordionTrigger>
+                            </div>
                             <AccordionContent className="px-4 pb-4">
                               <div className="grid grid-cols-2 gap-2 mb-4">
                                 <InlineFormField label="Name"><Input value={carrier.name || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'name', e.target.value)} /></InlineFormField>
@@ -972,9 +965,12 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                                     <SelectContent><SelectItem value="none">Select</SelectItem>{FEC_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </InlineFormField>
+                                <InlineFormField label="Modulation"><Input value={carrier.modulationType || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'modulationType', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="TSID"><Input value={carrier.tsid || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'tsid', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="ONID"><Input value={carrier.onid || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'onid', e.target.value)} /></InlineFormField>
+                                <InlineFormField label="Network ID"><Input value={carrier.networkId || ""} onChange={(e) => updateCarrierInSatEdit(cIdx, 'networkId', e.target.value)} /></InlineFormField>
                               </div>
 
-                              {/* Services */}
                               <div className="border-t pt-3">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="text-xs font-medium">Services ({(carrier.services || []).length})</span>
@@ -988,10 +984,12 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                                       <TableHeader className="bg-muted/30">
                                         <TableRow>
                                           <TableHead className="text-xs py-1">Name</TableHead>
+                                          <TableHead className="text-xs py-1">Type</TableHead>
                                           <TableHead className="text-xs py-1">Video PID</TableHead>
                                           <TableHead className="text-xs py-1">Audio PID</TableHead>
                                           <TableHead className="text-xs py-1">PCR PID</TableHead>
                                           <TableHead className="text-xs py-1">Prog #</TableHead>
+                                          <TableHead className="text-xs py-1">Fav Group</TableHead>
                                           <TableHead className="text-xs py-1 w-10"></TableHead>
                                         </TableRow>
                                       </TableHeader>
@@ -999,10 +997,12 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
                                         {(carrier.services || []).map((svc: any, sIdx: number) => (
                                           <TableRow key={svc.id || sIdx}>
                                             <TableCell className="py-1"><Input className="text-xs h-7" value={svc.name || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'name', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.serviceType || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'serviceType', e.target.value)} /></TableCell>
                                             <TableCell className="py-1"><Input className="text-xs h-7" value={svc.videoPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'videoPid', e.target.value)} /></TableCell>
                                             <TableCell className="py-1"><Input className="text-xs h-7" value={svc.audioPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'audioPid', e.target.value)} /></TableCell>
                                             <TableCell className="py-1"><Input className="text-xs h-7" value={svc.pcrPid || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'pcrPid', e.target.value)} /></TableCell>
                                             <TableCell className="py-1"><Input className="text-xs h-7" value={svc.programNumber || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'programNumber', e.target.value)} /></TableCell>
+                                            <TableCell className="py-1"><Input className="text-xs h-7" value={svc.favGroup || ""} onChange={(e) => updateServiceInCarrier(cIdx, sIdx, 'favGroup', e.target.value)} /></TableCell>
                                             <TableCell className="py-1"><Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeServiceFromCarrier(cIdx, sIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button></TableCell>
                                           </TableRow>
                                         ))}
@@ -1038,6 +1038,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
               <BarChart3 className="h-5 w-5 text-primary" />
               Project Report - {selectedProject?.name} / {selectedBuild?.name}
             </DialogTitle>
+            <DialogDescription>Summary of all mapped equipment for this build.</DialogDescription>
           </DialogHeader>
           <ScrollArea className="h-[75vh]">
             <div className="space-y-6 pr-4">
