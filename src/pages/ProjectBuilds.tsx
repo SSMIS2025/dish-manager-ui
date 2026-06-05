@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/apiService";
+import { buildSDBXML } from "@/services/xmlBuilder";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -300,93 +301,24 @@ const ProjectBuilds = () => {
   };
 
   const generateBuildXML = (
-    build: Build, 
-    lnbs: any[], 
-    switches: any[], 
-    motors: any[], 
-    unicables: any[], 
+    build: Build,
+    lnbs: any[],
+    switches: any[],
+    motors: any[],
+    unicables: any[],
     satellites: any[]
   ) => {
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<SDB>\n  <projinfo>\n';
-    xml += `    <projname>${build.name}</projname>\n`;
-    
-    // LNBs
-    if (lnbs.length > 0) {
-      lnbs.forEach(lnb => {
-        xml += `    <LNBlock>\n`;
-        xml += `      <name>${lnb.name || ''}</name>\n`;
-        xml += `      <LNBType>${lnb.type || ''}</LNBType>\n`;
-        xml += `      <lowFreq>${lnb.lowFrequency || ''}</lowFreq>\n`;
-        xml += `      <highFreq>${lnb.highFrequency || ''}</highFreq>\n`;
-        xml += `    </LNBlock>\n`;
-      });
-    }
-
-    // Switches
-    if (switches.length > 0) {
-      xml += `    <switchblock type='${switches[0]?.type || 'Dis'}' noofSwi='${switches.length}'>\n`;
-      switches.forEach(sw => {
-        xml += `      <switch>${sw.name || ''}</switch>\n`;
-      });
-      xml += `    </switchblock>\n`;
-    }
-
-    // Motors
-    if (motors.length > 0) {
-      motors.forEach(motor => {
-        xml += `    <motor>\n`;
-        xml += `      <name>${motor.name || ''}</name>\n`;
-        xml += `      <type>${motor.type || ''}</type>\n`;
-        xml += `      <position>${motor.position || ''}</position>\n`;
-        xml += `    </motor>\n`;
-      });
-    }
-
-    // Unicables
-    if (unicables.length > 0) {
-      unicables.forEach(uc => {
-        xml += `    <unicable>\n`;
-        xml += `      <name>${uc.name || ''}</name>\n`;
-        xml += `      <type>${uc.type || ''}</type>\n`;
-        xml += `      <port>${uc.port || ''}</port>\n`;
-        xml += `    </unicable>\n`;
-      });
-    }
-
-    // Satellites
-    if (satellites.length > 0) {
-      xml += `    <sattliteblock>\n`;
-      satellites.forEach(sat => {
-        xml += `      <sattliteinfo>\n`;
-        xml += `        <name>${sat.name || ''}</name>\n`;
-        xml += `        <position>${sat.orbitalPosition || ''}</position>\n`;
-        xml += `        <polarization>${sat.polarization || ''}</polarization>\n`;
-        if (sat.carriers && sat.carriers.length > 0) {
-          sat.carriers.forEach((carrier: any) => {
-            xml += `        <carrers>\n`;
-            xml += `          <name>${carrier.name || ''}</name>\n`;
-            xml += `          <frequency>${carrier.frequency || ''}</frequency>\n`;
-            xml += `          <symbolRate>${carrier.symbolRate || ''}</symbolRate>\n`;
-            if (carrier.services && carrier.services.length > 0) {
-              carrier.services.forEach((service: any) => {
-                xml += `          <services>\n`;
-                xml += `            <name>${service.name || ''}</name>\n`;
-                xml += `            <serviceType>${service.serviceType || ''}</serviceType>\n`;
-                xml += `            <videoPid>${service.videoPid || ''}</videoPid>\n`;
-                xml += `            <audioPid>${service.audioPid || ''}</audioPid>\n`;
-                xml += `          </services>\n`;
-              });
-            }
-            xml += `        </carrers>\n`;
-          });
-        }
-        xml += `      </sattliteinfo>\n`;
-      });
-      xml += `    </sattliteblock>\n`;
-    }
-
-    xml += '  </projinfo>\n</SDB>';
-    return xml;
+    const project = projects.find(p => p.id === build.projectId);
+    return buildSDBXML({
+      projectName: project?.name,
+      buildName: build.name,
+      lnbs,
+      switches,
+      motors,
+      unicables,
+      satellites,
+      defaults: { lnbs, switches, motors, unicables, satellites },
+    });
   };
 
   const openEditDialog = (build: Build) => {
