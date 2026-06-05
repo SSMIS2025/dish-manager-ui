@@ -25,6 +25,7 @@ import {
   DEFAULT_UNICABLE_TYPES, UNICABLE_STATUS_OPTIONS, UNICABLE_PORT_OPTIONS,
   SATELLITE_DIRECTIONS, POLARIZATIONS, FEC_OPTIONS, FEC_MODES, getMergedTypes
 } from "@/config/equipmentTypes";
+import { buildSDBXML } from "@/services/xmlBuilder";
 
 interface ProjectMappingProps {
   username: string;
