@@ -327,6 +327,7 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
 
   const generateBuildXML = (): string => {
     const selectedBuild = builds.find(b => b.id === selectedBuildId);
+    const selectedProject = projects.find(p => p.id === selectedProjectId);
     if (!selectedBuild) return "";
     const mappedLnbs = allLnbs.filter(l => isMapped('lnbs', l.id));
     const mappedSwitches = allSwitches.filter(s => isMapped('switches', s.id));
@@ -334,47 +335,22 @@ const ProjectMapping = ({ username }: ProjectMappingProps) => {
     const mappedUnicables = allUnicables.filter(u => isMapped('unicables', u.id));
     const mappedSats = allSatellites.filter(s => isMapped('satellites', s.id));
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<SDB>\n  <projinfo>\n`;
-    xml += `    <projname>${selectedBuild.name}</projname>\n`;
-    mappedLnbs.forEach(l => {
-      xml += `    <LNBlock>\n      <name>${l.name}</name>\n      <LowFrequency>${l.lowFrequency || ''}</LowFrequency>\n      <HighFrequency>${l.highFrequency || ''}</HighFrequency>\n      <LO1High>${l.lo1High || ''}</LO1High>\n      <LO1Low>${l.lo1Low || ''}</LO1Low>\n      <BandType>${l.bandType || ''}</BandType>\n      <PowerControl>${l.powerControl || ''}</PowerControl>\n      <VControl>${l.vControl || ''}</VControl>\n      <KhzOption>${l.khzOption || ''}</KhzOption>\n    </LNBlock>\n`;
+    return buildSDBXML({
+      projectName: selectedProject?.name,
+      buildName: selectedBuild.name,
+      lnbs: mappedLnbs,
+      switches: mappedSwitches,
+      motors: mappedMotors,
+      unicables: mappedUnicables,
+      satellites: mappedSats,
+      defaults: {
+        lnbs: allLnbs,
+        switches: allSwitches,
+        motors: allMotors,
+        unicables: allUnicables,
+        satellites: allSatellites,
+      },
     });
-    mappedSwitches.forEach(s => {
-      xml += `    <switchblock>\n      <type>${s.switchType || ''}</type>\n`;
-      const options = Array.isArray(s.switchOptions) ? s.switchOptions : [];
-      options.forEach((opt: string, idx: number) => { xml += `      <option${idx + 1}>${opt}</option${idx + 1}>\n`; });
-      xml += `    </switchblock>\n`;
-    });
-    mappedMotors.forEach(m => {
-      xml += `    <motor>\n      <type>${m.motorType || ''}</type>\n`;
-      if (m.motorType === 'DiSEqC 1.0') { xml += `      <position>${m.position || ''}</position>\n`; }
-      else { xml += `      <longitude>${m.longitude || ''}</longitude>\n      <latitude>${m.latitude || ''}</latitude>\n      <eastWest>${m.eastWest || ''}</eastWest>\n      <northSouth>${m.northSouth || ''}</northSouth>\n`; }
-      xml += `    </motor>\n`;
-    });
-    mappedUnicables.forEach(u => {
-      xml += `    <unicable>\n      <type>${u.unicableType || ''}</type>\n      <status>${u.status || ''}</status>\n`;
-      if (u.unicableType === 'DSCR') xml += `      <port>${u.port || ''}</port>\n`;
-      const slots = Array.isArray(u.ifSlots) ? u.ifSlots : [];
-      slots.forEach((slot: string, idx: number) => { xml += `      <slot${idx + 1}>${slot}</slot${idx + 1}>\n`; });
-      xml += `    </unicable>\n`;
-    });
-    if (mappedSats.length > 0) {
-      xml += `    <sattliteblock>\n`;
-      mappedSats.forEach(sat => {
-        xml += `      <sattliteinfo>\n        <name>${sat.name}</name>\n        <position>${sat.position || ''}</position>\n        <direction>${sat.direction || ''}</direction>\n`;
-        (sat.carriers || []).forEach((c: any) => {
-          xml += `        <carrers>\n          <name>${c.name}</name>\n          <frequency>${c.frequency || ''}</frequency>\n          <polarization>${c.polarization || ''}</polarization>\n          <symbolRate>${c.symbolRate || ''}</symbolRate>\n          <fec>${c.fec || ''}</fec>\n`;
-          (c.services || []).forEach((s: any) => {
-            xml += `          <services>\n            <name>${s.name}</name>\n            <videoPid>${s.videoPid || ''}</videoPid>\n            <audioPid>${s.audioPid || ''}</audioPid>\n            <pcrPid>${s.pcrPid || ''}</pcrPid>\n            <programNumber>${s.programNumber || ''}</programNumber>\n          </services>\n`;
-          });
-          xml += `        </carrers>\n`;
-        });
-        xml += `      </sattliteinfo>\n`;
-      });
-      xml += `    </sattliteblock>\n`;
-    }
-    xml += `  </projinfo>\n</SDB>`;
-    return xml;
   };
 
   const handleGenerateBin = async () => {
