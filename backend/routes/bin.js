@@ -25,7 +25,14 @@ function resolveExecutable(baseName) {
     candidates.push(path.join(dir, `${baseName}${ext}`));
     candidates.push(path.join(dir, baseName));
     if (platform === 'win32') candidates.push(path.join(dir, `${baseName}.exe`));
-    else candidates.push(path.join(dir, `${baseName}.out`));
+    else {
+      candidates.push(path.join(dir, `${baseName}.out`));
+      candidates.push(path.join(dir, `${baseName}.exe`)); // .exe via wine on Linux
+    }
+    // lowercase variants
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}${ext}`));
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}.exe`));
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}.out`));
   }
 
   for (const p of candidates) {
