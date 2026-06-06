@@ -51,8 +51,13 @@ class BundledBinHandler {
     // Linux/Mac alternatives
     if (this.platform === 'linux' || this.platform === 'darwin') {
       names.push(`${baseName}.out`);
+      names.push(`${baseName}.exe`); // some Linux deployments keep the .exe name
       names.push(baseName);
     }
+
+    // Always include lowercase variants (e.g. binert.exe vs Binert.exe)
+    const lower = [...names].map((n) => n.toLowerCase());
+    names.push(...lower);
     
     return [...new Set(names)]; // Remove duplicates
   }
