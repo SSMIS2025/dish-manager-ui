@@ -15,6 +15,7 @@ function resolveExecutable(baseName) {
     process.env.BIN_EXE_DIR,
     path.join(__dirname, '..', 'bin'),
     path.join(__dirname, '..', '..', 'bin'),
+    '/var/www/html/generation',
     '/var/www/html',
     '/usr/local/bin',
     'C:\\Program Files\\SDB Tool\\bin',
@@ -24,7 +25,14 @@ function resolveExecutable(baseName) {
     candidates.push(path.join(dir, `${baseName}${ext}`));
     candidates.push(path.join(dir, baseName));
     if (platform === 'win32') candidates.push(path.join(dir, `${baseName}.exe`));
-    else candidates.push(path.join(dir, `${baseName}.out`));
+    else {
+      candidates.push(path.join(dir, `${baseName}.out`));
+      candidates.push(path.join(dir, `${baseName}.exe`)); // .exe via wine on Linux
+    }
+    // lowercase variants
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}${ext}`));
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}.exe`));
+    candidates.push(path.join(dir, `${baseName.toLowerCase()}.out`));
   }
 
   for (const p of candidates) {
@@ -55,11 +63,16 @@ module.exports = (pool, asyncHandler, generateId, getMySQLDateTime) => {
     try {
       fs.writeFileSync(xmlPath, xmlData);
       if (process.platform !== 'win32') {
-        try { fs.chmodSync(exePath, 0o755); } catch {}
+        try { fs.chmodSync(exePath, 0o755); }
+        catch (e) { if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e; }
       }
 
+      const isWinExe = /\.exe$/i.test(exePath);
+      const runCmd = (process.platform !== 'win32' && isWinExe) ? (process.env.WINE_BIN || 'wine') : exePath;
+      const runArgs = (process.platform !== 'win32' && isWinExe) ? [exePath, xmlPath, binPath] : [xmlPath, binPath];
+
       await new Promise((resolve, reject) => {
-        execFile(exePath, [xmlPath, binPath], { timeout: 60000 }, (error, stdout, stderr) => {
+        execFile(runCmd, runArgs, { timeout: 60000 }, (error, stdout, stderr) => {
           if (error) reject(new Error(stderr || error.message));
           else resolve(stdout);
         });
@@ -103,11 +116,16 @@ module.exports = (pool, asyncHandler, generateId, getMySQLDateTime) => {
       const binBuffer = Buffer.from(binData, 'base64');
       fs.writeFileSync(binPath, binBuffer);
       if (process.platform !== 'win32') {
-        try { fs.chmodSync(exePath, 0o755); } catch {}
+        try { fs.chmodSync(exePath, 0o755); }
+        catch (e) { if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e; }
       }
 
+      const isWinExe = /\.exe$/i.test(exePath);
+      const runCmd = (process.platform !== 'win32' && isWinExe) ? (process.env.WINE_BIN || 'wine') : exePath;
+      const runArgs = (process.platform !== 'win32' && isWinExe) ? [exePath, binPath, xmlPath] : [binPath, xmlPath];
+
       await new Promise((resolve, reject) => {
-        execFile(exePath, [binPath, xmlPath], { timeout: 60000 }, (error, stdout, stderr) => {
+        execFile(runCmd, runArgs, { timeout: 60000 }, (error, stdout, stderr) => {
           if (error) reject(new Error(stderr || error.message));
           else resolve(stdout);
         });

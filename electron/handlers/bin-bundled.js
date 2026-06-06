@@ -51,8 +51,13 @@ class BundledBinHandler {
     // Linux/Mac alternatives
     if (this.platform === 'linux' || this.platform === 'darwin') {
       names.push(`${baseName}.out`);
+      names.push(`${baseName}.exe`); // some Linux deployments keep the .exe name
       names.push(baseName);
     }
+
+    // Always include lowercase variants (e.g. binert.exe vs Binert.exe)
+    const lower = [...names].map((n) => n.toLowerCase());
+    names.push(...lower);
     
     return [...new Set(names)]; // Remove duplicates
   }
@@ -63,13 +68,16 @@ class BundledBinHandler {
     
     // Base paths to search
     const basePaths = [
+      // Custom override via env
+      process.env.BIN_EXE_DIR,
       // Bundled with app (production)
       process.resourcesPath ? path.join(process.resourcesPath, 'bin') : null,
       path.join(__dirname, '../../bin'),
       path.join(__dirname, '../bin'),
       // Development paths
       path.join(__dirname, '../../../bin'),
-      // System paths (Linux/Mac)
+      // System paths (Linux/Mac) — user-provided locations
+      '/var/www/html/generation',
       '/var/www/html',
       '/usr/local/bin',
       '/usr/bin',
@@ -212,21 +220,40 @@ class BundledBinHandler {
 
   executeCommand(exePath, args) {
     return new Promise((resolve, reject) => {
-      // Make executable on Unix systems
+      // Make executable on Unix systems — ignore EPERM/EACCES (file may already
+      // be executable but owned by root). Only abort if the file truly isn't runnable.
       if (this.platform !== 'win32') {
         try {
-          fs.chmodSync(exePath, '755');
+          fs.chmodSync(exePath, 0o755);
         } catch (e) {
-          console.warn('Could not set executable permissions:', e.message);
+          if (e && (e.code === 'EPERM' || e.code === 'EACCES')) {
+            console.warn(`chmod skipped for ${exePath} (${e.code}); will try to execute as-is.`);
+          } else {
+            console.warn('Could not set executable permissions:', e.message);
+          }
         }
       }
 
-      // Use execFile for better security
-      execFile(exePath, args, { timeout: 60000 }, (error, stdout, stderr) => {
+      // On Linux/Mac, if the executable is a Windows .exe, run it through wine.
+      const isWinExe = /\.exe$/i.test(exePath);
+      let cmd = exePath;
+      let cmdArgs = args;
+      if (this.platform !== 'win32' && isWinExe) {
+        cmd = process.env.WINE_BIN || 'wine';
+        cmdArgs = [exePath, ...args];
+      }
+
+      execFile(cmd, cmdArgs, { timeout: 60000 }, (error, stdout, stderr) => {
         if (error) {
           console.error('Execution error:', error);
           console.error('stderr:', stderr);
-          reject(new Error(stderr || error.message));
+          let msg = stderr || error.message;
+          if (error.code === 'EACCES') {
+            msg = `Permission denied executing ${exePath}. Run: sudo chmod +x "${exePath}"`;
+          } else if (error.code === 'ENOENT' && cmd === 'wine') {
+            msg = `wine is required to run ${exePath} on Linux. Install wine or provide a Linux build (.out).`;
+          }
+          reject(new Error(msg));
         } else {
           console.log('Execution stdout:', stdout);
           resolve(stdout);
