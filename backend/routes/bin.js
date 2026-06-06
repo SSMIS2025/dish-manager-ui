@@ -15,6 +15,7 @@ function resolveExecutable(baseName) {
     process.env.BIN_EXE_DIR,
     path.join(__dirname, '..', 'bin'),
     path.join(__dirname, '..', '..', 'bin'),
+    '/var/www/html/generation',
     '/var/www/html',
     '/usr/local/bin',
     'C:\\Program Files\\SDB Tool\\bin',
