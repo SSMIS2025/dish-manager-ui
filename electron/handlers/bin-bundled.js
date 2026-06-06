@@ -63,13 +63,16 @@ class BundledBinHandler {
     
     // Base paths to search
     const basePaths = [
+      // Custom override via env
+      process.env.BIN_EXE_DIR,
       // Bundled with app (production)
       process.resourcesPath ? path.join(process.resourcesPath, 'bin') : null,
       path.join(__dirname, '../../bin'),
       path.join(__dirname, '../bin'),
       // Development paths
       path.join(__dirname, '../../../bin'),
-      // System paths (Linux/Mac)
+      // System paths (Linux/Mac) — user-provided locations
+      '/var/www/html/generation',
       '/var/www/html',
       '/usr/local/bin',
       '/usr/bin',
