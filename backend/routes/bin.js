@@ -63,11 +63,16 @@ module.exports = (pool, asyncHandler, generateId, getMySQLDateTime) => {
     try {
       fs.writeFileSync(xmlPath, xmlData);
       if (process.platform !== 'win32') {
-        try { fs.chmodSync(exePath, 0o755); } catch {}
+        try { fs.chmodSync(exePath, 0o755); }
+        catch (e) { if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e; }
       }
 
+      const isWinExe = /\.exe$/i.test(exePath);
+      const runCmd = (process.platform !== 'win32' && isWinExe) ? (process.env.WINE_BIN || 'wine') : exePath;
+      const runArgs = (process.platform !== 'win32' && isWinExe) ? [exePath, xmlPath, binPath] : [xmlPath, binPath];
+
       await new Promise((resolve, reject) => {
-        execFile(exePath, [xmlPath, binPath], { timeout: 60000 }, (error, stdout, stderr) => {
+        execFile(runCmd, runArgs, { timeout: 60000 }, (error, stdout, stderr) => {
           if (error) reject(new Error(stderr || error.message));
           else resolve(stdout);
         });
