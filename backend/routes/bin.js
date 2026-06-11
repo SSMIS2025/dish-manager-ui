@@ -31,10 +31,18 @@ function smtpSend({ host, port, from, to, subject, body, user, pass }) {
     const socket = net.createConnection({ host, port });
     socket.setEncoding('utf8');
     socket.setTimeout(15000);
-    const greet = user && pass ? `EHLO ${os.hostname()}\r\n` : `HELO ${os.hostname()}\r\n`;
-    const authSteps = user && pass
-      ? [`AUTH LOGIN\r\n`, `${Buffer.from(user).toString('base64')}\r\n`, `${Buffer.from(pass).toString('base64')}\r\n`]
-      : [];
+    const authMode = (process.env.SDB_SMTP_AUTH || (user && pass ? 'plain' : 'none')).toLowerCase();
+    const useAuth = user && pass && authMode !== 'none';
+    const greet = useAuth ? `EHLO ${os.hostname()}\r\n` : `HELO ${os.hostname()}\r\n`;
+    let authSteps = [];
+    if (useAuth) {
+      if (authMode === 'login') {
+        authSteps = [`AUTH LOGIN\r\n`, `${Buffer.from(user).toString('base64')}\r\n`, `${Buffer.from(pass).toString('base64')}\r\n`];
+      } else {
+        const token = Buffer.from(`\0${user}\0${pass}`).toString('base64');
+        authSteps = [`AUTH PLAIN ${token}\r\n`];
+      }
+    }
     const steps = [
       greet,
       ...authSteps,
