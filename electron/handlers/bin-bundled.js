@@ -2,6 +2,8 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { reportBinError } = require('./error-mailer');
+
 
 class BundledBinHandler {
   constructor(config = {}) {
@@ -234,14 +236,11 @@ class BundledBinHandler {
         }
       }
 
-      // On Linux/Mac, if the executable is a Windows .exe, run it through wine.
-      const isWinExe = /\.exe$/i.test(exePath);
-      let cmd = exePath;
-      let cmdArgs = args;
-      if (this.platform !== 'win32' && isWinExe) {
-        cmd = process.env.WINE_BIN || 'wine';
-        cmdArgs = [exePath, ...args];
-      }
+      // Run the binary directly. On Linux the deployed binary is a native
+      // Linux ELF executable (despite the .exe filename) — do NOT use wine.
+      const cmd = exePath;
+      const cmdArgs = args;
+      const hintDir = path.dirname(exePath);
 
       execFile(cmd, cmdArgs, { timeout: 60000 }, (error, stdout, stderr) => {
         if (error) {
@@ -250,9 +249,9 @@ class BundledBinHandler {
           let msg = stderr || error.message;
           if (error.code === 'EACCES') {
             msg = `Permission denied executing ${exePath}. Run: sudo chmod +x "${exePath}"`;
-          } else if (error.code === 'ENOENT' && cmd === 'wine') {
-            msg = `wine is required to run ${exePath} on Linux. Install wine or provide a Linux build (.out).`;
           }
+          // Fire-and-forget mail report including SDBError.txt contents.
+          reportBinError({ exePath, args, stderr, stdout, error, hintDir });
           reject(new Error(msg));
         } else {
           console.log('Execution stdout:', stdout);
