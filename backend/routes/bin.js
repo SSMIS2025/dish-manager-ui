@@ -84,6 +84,7 @@ ${stderr || ''}
 ${attachment}`;
     await smtpSend({
       host: SMTP_HOST, port: SMTP_PORT, from: MAIL_FROM, to: MAIL_TO,
+      user: SMTP_USER, pass: SMTP_PASS,
       subject: `[SDB] BIN execution error on ${os.hostname()}`, body,
     });
   } catch (e) {
