@@ -8,7 +8,9 @@ const net = require('net');
 
 const SMTP_HOST = process.env.SDB_SMTP_HOST || '191.168.12.9';
 const SMTP_PORT = parseInt(process.env.SDB_SMTP_PORT || '25', 10);
-const MAIL_FROM = process.env.SDB_MAIL_FROM || `sdb-tool@${os.hostname()}`;
+const SMTP_USER = process.env.SDB_SMTP_USER || '';
+const SMTP_PASS = process.env.SDB_SMTP_PASS || '';
+const MAIL_FROM = process.env.SDB_MAIL_FROM || SMTP_USER || `sdb-tool@${os.hostname()}`;
 const MAIL_TO = (process.env.SDB_MAIL_TO || 'team@localhost').split(',').map(s => s.trim()).filter(Boolean);
 
 function findErrorFile(hintDir) {
