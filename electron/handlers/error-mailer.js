@@ -25,14 +25,19 @@ function findErrorFile(hintDir) {
   return null;
 }
 
-function smtpSend({ host, port, from, to, subject, body }) {
+function smtpSend({ host, port, from, to, subject, body, user, pass }) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host, port });
     socket.setEncoding('utf8');
     socket.setTimeout(15000);
 
+    const greet = user && pass ? `EHLO ${os.hostname()}\r\n` : `HELO ${os.hostname()}\r\n`;
+    const authSteps = user && pass
+      ? [`AUTH LOGIN\r\n`, `${Buffer.from(user).toString('base64')}\r\n`, `${Buffer.from(pass).toString('base64')}\r\n`]
+      : [];
     const steps = [
-      `HELO ${os.hostname()}\r\n`,
+      greet,
+      ...authSteps,
       `MAIL FROM:<${from}>\r\n`,
       ...to.map(r => `RCPT TO:<${r}>\r\n`),
       `DATA\r\n`,
