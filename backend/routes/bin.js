@@ -8,7 +8,9 @@ const net = require('net');
 
 const SMTP_HOST = process.env.SDB_SMTP_HOST || '191.168.12.9';
 const SMTP_PORT = parseInt(process.env.SDB_SMTP_PORT || '25', 10);
-const MAIL_FROM = process.env.SDB_MAIL_FROM || `sdb-tool@${os.hostname()}`;
+const SMTP_USER = process.env.SDB_SMTP_USER || '';
+const SMTP_PASS = process.env.SDB_SMTP_PASS || '';
+const MAIL_FROM = process.env.SDB_MAIL_FROM || SMTP_USER || `sdb-tool@${os.hostname()}`;
 const MAIL_TO = (process.env.SDB_MAIL_TO || 'team@localhost').split(',').map(s => s.trim()).filter(Boolean);
 
 function findErrorFile(hintDir) {
@@ -24,13 +26,18 @@ function findErrorFile(hintDir) {
   return null;
 }
 
-function smtpSend({ host, port, from, to, subject, body }) {
+function smtpSend({ host, port, from, to, subject, body, user, pass }) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host, port });
     socket.setEncoding('utf8');
     socket.setTimeout(15000);
+    const greet = user && pass ? `EHLO ${os.hostname()}\r\n` : `HELO ${os.hostname()}\r\n`;
+    const authSteps = user && pass
+      ? [`AUTH LOGIN\r\n`, `${Buffer.from(user).toString('base64')}\r\n`, `${Buffer.from(pass).toString('base64')}\r\n`]
+      : [];
     const steps = [
-      `HELO ${os.hostname()}\r\n`,
+      greet,
+      ...authSteps,
       `MAIL FROM:<${from}>\r\n`,
       ...to.map(r => `RCPT TO:<${r}>\r\n`),
       `DATA\r\n`,
@@ -77,6 +84,7 @@ ${stderr || ''}
 ${attachment}`;
     await smtpSend({
       host: SMTP_HOST, port: SMTP_PORT, from: MAIL_FROM, to: MAIL_TO,
+      user: SMTP_USER, pass: SMTP_PASS,
       subject: `[SDB] BIN execution error on ${os.hostname()}`, body,
     });
   } catch (e) {
