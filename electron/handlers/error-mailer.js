@@ -1,5 +1,8 @@
-// Native SMTP error notifier — no external modules.
-// Reads SDBError.txt (if present) and sends an email via raw socket SMTP.
+// Native SMTP error notifier — no external modules. Mirrors the PHP
+// fsockopen flow in mail_smtp.php: EHLO, optional AUTH LOGIN only when a
+// user is configured (open relays need no auth), MAIL FROM / RCPT TO /
+// DATA / QUIT. Responses are read but intermediate codes are not strictly
+// validated (matches PHP behavior).
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +12,8 @@ const SMTP_HOST = process.env.SDB_SMTP_HOST || '191.168.12.9';
 const SMTP_PORT = parseInt(process.env.SDB_SMTP_PORT || '25', 10);
 const SMTP_USER = process.env.SDB_SMTP_USER || '';
 const SMTP_PASS = process.env.SDB_SMTP_PASS || '';
-const MAIL_FROM = process.env.SDB_MAIL_FROM || SMTP_USER || `sdb-tool@${os.hostname()}`;
+const MAIL_FROM = process.env.SDB_MAIL_FROM || 'sdb-noreply@local';
+const MAIL_FROM_NAME = process.env.SDB_MAIL_FROM_NAME || 'SDB Notifications';
 const MAIL_TO = (process.env.SDB_MAIL_TO || 'team@localhost').split(',').map(s => s.trim()).filter(Boolean);
 
 function findErrorFile(hintDir) {
@@ -25,63 +29,62 @@ function findErrorFile(hintDir) {
   return null;
 }
 
-function smtpSend({ host, port, from, to, subject, body, user, pass }) {
+function smtpSend({ host, port, from, fromName, to, subject, body, user, pass }) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host, port });
     socket.setEncoding('utf8');
-    socket.setTimeout(15000);
+    socket.setTimeout(20000);
 
-    const authMode = (process.env.SDB_SMTP_AUTH || (user && pass ? 'plain' : 'none')).toLowerCase();
-    const useAuth = user && pass && authMode !== 'none';
-    const greet = useAuth ? `EHLO ${os.hostname()}\r\n` : `HELO ${os.hostname()}\r\n`;
-    let authSteps = [];
-    if (useAuth) {
-      if (authMode === 'login') {
-        authSteps = [`AUTH LOGIN\r\n`, `${Buffer.from(user).toString('base64')}\r\n`, `${Buffer.from(pass).toString('base64')}\r\n`];
-      } else {
-        // AUTH PLAIN: base64("\0user\0pass") — widely supported, single step.
-        const token = Buffer.from(`\0${user}\0${pass}`).toString('base64');
-        authSteps = [`AUTH PLAIN ${token}\r\n`];
-      }
-    }
-    const steps = [
-      greet,
-      ...authSteps,
-      `MAIL FROM:<${from}>\r\n`,
-      ...to.map(r => `RCPT TO:<${r}>\r\n`),
-      `DATA\r\n`,
-      `From: ${from}\r\nTo: ${to.join(', ')}\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}\r\n.\r\n`,
-      `QUIT\r\n`,
-    ];
-    let i = 0;
     let buf = '';
+    let pending = null;
 
     socket.on('data', (chunk) => {
       buf += chunk;
-      // process complete lines ending with code + space
-      const lines = buf.split(/\r?\n/);
-      buf = lines.pop();
-      for (const line of lines) {
-        const m = /^(\d{3})([ -])/.exec(line);
-        if (!m) continue;
-        const code = parseInt(m[1], 10);
-        const last = m[2] === ' ';
-        if (!last) continue;
-        if (code >= 400) {
-          socket.end();
-          return reject(new Error(`SMTP ${code}: ${line}`));
+      while (pending) {
+        const lines = buf.split(/\r?\n/);
+        let endIdx = -1;
+        for (let k = 0; k < lines.length - 1; k++) {
+          if (/^\d{3} /.test(lines[k])) { endIdx = k; break; }
         }
-        if (i < steps.length) {
-          socket.write(steps[i++]);
-        } else {
-          socket.end();
-          resolve(true);
-        }
+        if (endIdx === -1) return;
+        const respLines = lines.slice(0, endIdx + 1);
+        buf = lines.slice(endIdx + 1).join('\r\n');
+        const cb = pending; pending = null;
+        cb.resolve(respLines.join('\n'));
       }
     });
     socket.on('timeout', () => { socket.destroy(); reject(new Error('SMTP timeout')); });
     socket.on('error', reject);
-    socket.on('end', () => resolve(true));
+
+    const readResp = () => new Promise((res) => { pending = { resolve: res }; });
+    const cmd = (c) => socket.write(c + '\r\n');
+
+    (async () => {
+      try {
+        await readResp();
+        cmd('EHLO ' + os.hostname()); await readResp();
+        if (user) {
+          cmd('AUTH LOGIN'); await readResp();
+          cmd(Buffer.from(user).toString('base64')); await readResp();
+          cmd(Buffer.from(pass).toString('base64')); await readResp();
+        }
+        cmd('MAIL FROM:<' + from + '>'); await readResp();
+        for (const r of to) { cmd('RCPT TO:<' + r + '>'); await readResp(); }
+        cmd('DATA'); await readResp();
+        const headers =
+          `From: ${fromName} <${from}>\r\n` +
+          `To: ${to.join(', ')}\r\n` +
+          `Subject: ${subject}\r\n` +
+          `MIME-Version: 1.0\r\n` +
+          `Content-Type: text/plain; charset=UTF-8\r\n` +
+          `Date: ${new Date().toUTCString()}\r\n`;
+        socket.write(headers + '\r\n' + body + '\r\n.\r\n');
+        await readResp();
+        cmd('QUIT'); await readResp();
+        socket.end();
+        resolve(true);
+      } catch (e) { try { socket.destroy(); } catch {} reject(e); }
+    })();
   });
 }
 
@@ -89,9 +92,7 @@ async function reportBinError({ exePath, args, stderr, stdout, error, hintDir })
   try {
     let attachment = '';
     const errFile = findErrorFile(hintDir);
-    if (errFile) {
-      try { attachment = fs.readFileSync(errFile, 'utf8'); } catch {}
-    }
+    if (errFile) { try { attachment = fs.readFileSync(errFile, 'utf8'); } catch {} }
     const body =
 `SDB Tool execution failure
 Host: ${os.hostname()}
@@ -109,14 +110,10 @@ ${attachment}`;
 
     if (!MAIL_TO.length) return;
     await smtpSend({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      from: MAIL_FROM,
-      to: MAIL_TO,
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-      subject: `[SDB] BIN execution error on ${os.hostname()}`,
-      body,
+      host: SMTP_HOST, port: SMTP_PORT,
+      from: MAIL_FROM, fromName: MAIL_FROM_NAME, to: MAIL_TO,
+      user: SMTP_USER, pass: SMTP_PASS,
+      subject: `[SDB] BIN execution error on ${os.hostname()}`, body,
     });
     console.log('Error report email sent to', MAIL_TO.join(', '));
   } catch (e) {
